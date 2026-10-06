@@ -1,0 +1,35 @@
+{
+  "$schema": "./node_modules/release-it/schema/release-it.json",
+  "git": {
+    "commitMessage": "chore(release): v${version}",
+    "tagName": "v${version}",
+    "tagAnnotation": "Release v${version}",
+    "requireCleanWorkingDir": true,
+    "requireCommits": true
+  },
+  "github": {
+    "release": false
+  },
+  "npm": {
+    "publish": false
+  },
+  "hooks": {
+    "after:bump": "cargo metadata --format-version 1 --manifest-path src-tauri/Cargo.toml > /dev/null"
+  },
+  "plugins": {
+    "@release-it/conventional-changelog": {
+      "preset": "conventionalcommits",
+      "infile": "CHANGELOG.md",
+      "header": "# Changelog\n\nAll notable changes to WaDesk will be documented in this file.\n"
+    },
+    "@release-it/bumper": {
+      "out": [
+        "src-tauri/tauri.conf.json",
+        {
+          "file": "src-tauri/Cargo.toml",
+          "path": "package.version"
+        }
+      ]
+    }
+  }
+}
