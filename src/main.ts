@@ -69,6 +69,17 @@ function log(level: string, message: string): void {
   while (list.childElementCount > 60) list.lastElementChild?.remove();
 }
 
+/** Announces async status once, after the burst of updates settles. */
+let announceTimer: number | undefined;
+function announce(message: string): void {
+  const region = el<HTMLParagraphElement>("status");
+  region.textContent = "";
+  window.clearTimeout(announceTimer);
+  announceTimer = window.setTimeout(() => {
+    region.textContent = message;
+  }, 400);
+}
+
 async function call<T>(cmd: string, args?: Record<string, unknown>): Promise<T | undefined> {
   if (!inTauri) {
     log("info", `${cmd} skipped: not running inside Tauri`);
@@ -200,6 +211,9 @@ function renderAccounts(): void {
         const badge = document.createElement("span");
         badge.className = "badge";
         badge.textContent = count > 99 ? "99+" : String(count);
+        // The badge is a number with no context on its own; fold it into the button's name.
+        badge.setAttribute("aria-hidden", "true");
+        avatar.setAttribute("aria-label", `${account.name}, ${count} unread`);
         avatar.append(badge);
       }
       item.append(avatar);
@@ -291,9 +305,13 @@ async function subscribeSessionEvents(): Promise<void> {
   if (!inTauri) return;
 
   await listen<{ count: number; label: string }>("session://unread", (event) => {
-    if (unread.get(event.payload.label) === event.payload.count) return;
-    unread.set(event.payload.label, event.payload.count);
+    const { count, label } = event.payload;
+    if (unread.get(label) === count) return;
+    unread.set(label, count);
     renderAccounts();
+
+    const account = settings.accounts.find((candidate) => `wa-${candidate.id}` === label);
+    announce(count === 0 ? `${account?.name ?? "Account"}: no unread messages` : `${count} unread in ${account?.name ?? "an account"}`);
   });
 
   // Pushed by each account's bootstrap script once the page reports its own UA.
@@ -355,6 +373,8 @@ function bindControls(): void {
     void call("show_grid").then(() => {
       grid = true;
       renderAccounts();
+      const cells = settings.gridCols * settings.gridRows;
+      announce(`Multi-account view, showing ${Math.min(cells, settings.accounts.length)} of ${settings.accounts.length} accounts`);
     });
   });
 
@@ -373,8 +393,27 @@ function bindControls(): void {
 
   el<HTMLFormElement>("open-chat-form").addEventListener("submit", (event) => {
     event.preventDefault();
-    const jid = el<HTMLInputElement>("chat-number").value.trim();
-    if (!jid || !selected) return;
+    const field = el<HTMLInputElement>("chat-number");
+    const error = el<HTMLParagraphElement>("chat-number-error");
+    const jid = field.value.trim();
+
+    // Digits only: WhatsApp keys a chat by phone number, so anything else cannot resolve.
+    if (!/^\d{6,15}$/.test(jid)) {
+      error.textContent = "Enter the phone number in international format, digits only.";
+      error.hidden = false;
+      field.setAttribute("aria-invalid", "true");
+      field.focus();
+      return;
+    }
+    error.hidden = true;
+    field.removeAttribute("aria-invalid");
+
+    if (!selected) {
+      error.textContent = "Add an account first.";
+      error.hidden = false;
+      return;
+    }
+
     void call("open_chat", { id: selected, jid }).then(() => {
       grid = false;
       active = selected;
@@ -447,13 +486,34 @@ async function main(): Promise<void> {
 function runAddDialog(): void {
   const dialog = el<HTMLDialogElement>("add-account-dialog");
   const name = el<HTMLInputElement>("add-account-name");
+  const error = el<HTMLParagraphElement>("add-account-error");
+
   dialog.addEventListener("close", () => {
     void (async () => {
       if (dialog.returnValue === "add") await call("add_account", { name: name.value });
       await call("close_add_dialog");
     })();
   });
+
+  // Validate inline instead of leaving it to a native bubble: the same message pattern as the
+  // chat field, and the dialog stays open with the caret back in the field.
+  const submit = dialog.querySelector<HTMLButtonElement>('button[value="add"]');
+  submit?.addEventListener("click", (event) => {
+    if (name.value.trim().length > 0) return;
+    event.preventDefault();
+    error.textContent = "Enter a name for the account.";
+    error.hidden = false;
+    name.setAttribute("aria-invalid", "true");
+    name.focus();
+  });
+  name.addEventListener("input", () => {
+    if (name.value.trim().length === 0) return;
+    error.hidden = true;
+    name.removeAttribute("aria-invalid");
+  });
+
   dialog.showModal();
+  // showModal() focuses the first focusable child; be explicit so the caret lands in the field.
   name.focus();
 }
 

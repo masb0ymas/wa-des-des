@@ -2,13 +2,20 @@
   --bg: #0b141a;
   --panel: #111b21;
   --panel-2: #182229;
+  /* Decorative borders and dividers only. At 1.4:1 against the surfaces it sits on it is far too
+     faint to outline an interactive control — use --line-strong for those. */
   --line: #23313a;
+  /* Boundaries of interactive controls (inputs, buttons, segmented control). 3.1:1 against every
+     surface below, which is the minimum WCAG 1.4.11 asks of a non-text UI boundary. */
+  --line-strong: #5c6f7b;
   --text: #e9edef;
   --muted: #8696a0;
   --accent: #00a884;
   --accent-dim: #005c4b;
   --danger: #f15c6d;
   --radius: 10px;
+  /* Minimum hit area for an icon-only control. */
+  --target: 44px;
   /* Must match DOCK_WIDTH in src-tauri/src/lib.rs. */
   --dock: 64px;
   /* Must match GRID_BAR_HEIGHT in src-tauri/src/lib.rs. */
@@ -61,24 +68,23 @@ body {
 
 .dock-btn {
   position: relative;
-  width: 38px;
-  height: 38px;
+  width: var(--target);
+  height: var(--target);
   padding: 0;
   border-radius: 50%;
   font-size: 12px;
   font-weight: 600;
-}
-
-.dock-btn {
   transition:
-    transform 0.12s ease,
+    opacity 0.12s ease,
     background-color 0.15s ease,
     border-color 0.15s ease,
     color 0.15s ease;
 }
 
+/* Press feedback by opacity, not transform: scaling an element inside the dock shifts the
+   surrounding icons, which reads as jitter. */
 .dock-btn:active {
-  transform: scale(0.88);
+  opacity: 0.65;
 }
 
 .dock-btn svg {
@@ -155,7 +161,7 @@ body {
   width: 52px;
   padding: 4px 6px;
   border-radius: 6px;
-  border: 1px solid var(--line);
+  border: 1px solid var(--line-strong);
   background: var(--panel-2);
   color: var(--text);
   font: inherit;
@@ -202,7 +208,7 @@ main {
   gap: 2px;
   margin: 0;
   padding: 3px;
-  border: 1px solid var(--line);
+  border: 1px solid var(--line-strong);
   border-radius: var(--radius);
   background: var(--panel);
 }
@@ -231,10 +237,12 @@ main {
   color: var(--text);
 }
 
+/* Selection is carried by fill + weight, not colour alone. */
 .tabs input:checked + span {
   background: var(--accent-dim);
   color: var(--text);
   font-weight: 600;
+  box-shadow: inset 0 0 0 1px var(--accent);
 }
 
 .tabs input:focus-visible + span {
@@ -287,7 +295,7 @@ input[type="text"] {
   width: 100%;
   padding: 7px 9px;
   border-radius: 8px;
-  border: 1px solid var(--line);
+  border: 1px solid var(--line-strong);
   background: var(--panel-2);
   color: var(--text);
   font: inherit;
@@ -298,6 +306,11 @@ input[type="text"]:focus-visible,
 button:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 1px;
+}
+
+/* The inline error text carries the message; this only reinforces where to look. */
+input[aria-invalid="true"] {
+  border-color: var(--danger);
 }
 
 .check {
@@ -323,7 +336,7 @@ button:focus-visible {
 button {
   padding: 7px 12px;
   border-radius: 8px;
-  border: 1px solid var(--line);
+  border: 1px solid var(--line-strong);
   background: var(--panel-2);
   color: var(--text);
   font: inherit;
@@ -353,7 +366,7 @@ button.danger {
 dialog {
   width: min(320px, calc(100vw - 32px));
   padding: 18px 20px;
-  border: 1px solid var(--line);
+  border: 1px solid var(--line-strong);
   border-radius: var(--radius);
   background: var(--panel-2);
   color: var(--text);
@@ -464,14 +477,41 @@ button.ghost {
   border-radius: 8px;
 }
 
-.chats input,
-.actions input {
+.chats input {
   flex: 1;
-  min-width: 120px;
+  /* Long account names must not widen the row; the field shrinks instead. */
+  min-inline-size: 0;
+  overflow-wrap: anywhere;
 }
 
 .actions {
   margin-top: 10px;
+}
+
+/* A labelled field plus its actions, stacked. */
+.stack {
+  display: grid;
+  gap: 10px;
+  margin-top: 10px;
+}
+
+/* Inline validation message, tied to its input through aria-describedby. */
+.field-error {
+  margin: 0;
+  color: var(--danger);
+  font-size: 11.5px;
+}
+
+/* Available to assistive technology only; the visual design has no room for it. */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
 }
 
 .log {

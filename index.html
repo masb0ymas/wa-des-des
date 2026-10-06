@@ -38,9 +38,15 @@
         <h2>Accounts</h2>
         <p class="hint">Each account has its own isolated login. Adding or removing one does not affect the others.</p>
         <ul class="chats" id="accounts"></ul>
-        <form class="actions" id="open-chat-form">
-          <input id="chat-number" type="text" inputmode="numeric" placeholder="Phone number, digits with country code" aria-label="Phone number" />
-          <button type="submit">Open chat</button>
+        <form class="stack" id="open-chat-form">
+          <label class="field" for="chat-number">
+            <span>Open a chat</span>
+            <input id="chat-number" type="text" inputmode="numeric" placeholder="6281234567890" aria-describedby="chat-number-error" />
+          </label>
+          <p class="field-error" id="chat-number-error" role="alert" hidden></p>
+          <div class="actions">
+            <button type="submit">Open chat</button>
+          </div>
         </form>
       </section>
 
@@ -94,10 +100,14 @@
     <!-- Only ever opened in the transparent `overlay` webview, which loads this page as
          index.html#add-account-dialog; the :target rules in styles.css strip everything else. -->
     <dialog id="add-account-dialog">
-      <form method="dialog">
-        <h2>Add account</h2>
-        <input id="add-account-name" type="text" maxlength="32" placeholder="e.g. Personal, Work" aria-label="Account name" autocomplete="off" />
-        <p class="hint">Up to 32 characters. Shown only on this device.</p>
+      <form method="dialog" aria-labelledby="add-account-title">
+        <h2 id="add-account-title">Add account</h2>
+        <label class="field" for="add-account-name">
+          <span>Name</span>
+          <input id="add-account-name" type="text" maxlength="32" placeholder="e.g. Personal, Work" aria-describedby="add-account-hint add-account-error" autocomplete="off" />
+        </label>
+        <p class="field-error" id="add-account-error" role="alert" hidden></p>
+        <p class="hint" id="add-account-hint">Up to 32 characters. Shown only on this device.</p>
         <div class="dialog-actions">
           <button value="cancel" class="ghost">Cancel</button>
           <button value="add" class="primary">Add</button>
@@ -108,7 +118,7 @@
     <!-- window.confirm() is not implemented by WKWebView under Tauri (it returns false without
          showing anything), so destructive actions ask through this dialog instead. -->
     <dialog id="confirm-dialog">
-      <form method="dialog">
+      <form method="dialog" aria-labelledby="confirm-title" aria-describedby="confirm-message">
         <h2 id="confirm-title"></h2>
         <p class="hint" id="confirm-message"></p>
         <div class="dialog-actions">
@@ -117,6 +127,10 @@
         </div>
       </form>
     </dialog>
+
+    <!-- Single polite live region for async status (unread totals, account switches). One region
+         that announces a full sentence beats several that each announce a bare number. -->
+    <p class="sr-only" id="status" role="status" aria-atomic="true"></p>
 
     <script type="module" src="/src/main.ts"></script>
   </body>

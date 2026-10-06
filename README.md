@@ -121,6 +121,23 @@ installer bootstraps the WebView2 runtime when it is missing.
 voice messages do not play, at the cost of a larger AppImage. The tray icon needs an AppIndicator
 host (GNOME users usually need an extension).
 
+## Interface notes
+
+The launcher is plain HTML/CSS/TypeScript — no UI framework, so there is no component library to
+inherit an accessibility baseline from. The rules the markup holds itself to:
+
+- **Two border tokens.** `--line` is decorative (1.4:1 against the surfaces, fine for card edges and
+  dividers). Interactive control boundaries use `--line-strong` at 3.1:1, the minimum WCAG 1.4.11
+  asks of a non-text UI boundary. Do not put `--line` on an input or button.
+- **44px icon targets.** `--target` drives the dock buttons. The dock rail is 64px wide to hold one.
+- **Press feedback by opacity, not transform.** Scaling an element inside the dock shifts its
+  neighbours, which reads as jitter.
+- **Every field has a visible label**, plus an inline error tied to it with `aria-describedby` and
+  `role="alert"`. A placeholder is never the only label.
+- **One live region** (`#status`, `role="status"`) announces a full sentence for async changes such
+  as unread totals — not a bare number, and not one region per badge.
+- **Reduced motion** disables the dialog entrance animation and every transition.
+
 ## Known limitations
 
 - **Multi-webview is a Tauri `unstable` feature.** `Window::add_child` may change between minor
