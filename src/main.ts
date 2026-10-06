@@ -350,6 +350,16 @@ async function subscribeSessionEvents(): Promise<void> {
     log("info", "account added");
   });
 
+  // Emitted while the downloaded update streams in; `total` stays null when unknown.
+  await listen<{ received: number; total: number | null }>("update://progress", (event) => {
+    const { received, total } = event.payload;
+    const status = el<HTMLElement>("update-status");
+    status.textContent =
+      total !== null
+        ? `Downloading update… ${Math.round((received / total) * 100)}%`
+        : `Downloading update… ${(received / 1048576).toFixed(1)} MB`;
+  });
+
   await listen("session://unsupported", () => {
     log("error", "WhatsApp Web reports an unsupported browser — change the User-Agent preset");
   });
@@ -385,6 +395,53 @@ function bindCheckbox(id: string, key: "nativeNotifications" | "badgeUnreadCount
   });
 }
 
+/** Result of the update check: the installed version and the newer release, when one exists. */
+interface UpdateCheck {
+  currentVersion: string;
+  update: { version: string; notes: string } | null;
+}
+
+/** Checks GitHub Releases and, with the user's confirmation, installs what it finds. */
+async function checkForUpdates(): Promise<void> {
+  const button = el<HTMLButtonElement>("check-updates");
+  const status = el<HTMLElement>("update-status");
+  button.disabled = true;
+  status.textContent = "Checking for updates…";
+
+  const result = await call<UpdateCheck>("check_for_updates");
+  if (!result) {
+    status.textContent = "Could not check for updates. See the activity log.";
+    button.disabled = false;
+    return;
+  }
+  if (!result.update) {
+    status.textContent = `WaDesk v${result.currentVersion} is up to date.`;
+    button.disabled = false;
+    return;
+  }
+
+  const notes = result.update.notes.trim().slice(0, 300);
+  const ok = await confirmAction(
+    `Update to v${result.update.version}?`,
+    notes.length > 0
+      ? notes
+      : "A newer version is available. The app restarts once the update is installed.",
+    "Install update",
+  );
+  if (!ok) {
+    button.disabled = false;
+    status.textContent = "Update dismissed. You can check again at any time.";
+    return;
+  }
+  // On success the app restarts, so an unresolved command is expected here.
+  status.textContent = "Downloading update…";
+  const done = await call<null>("install_update");
+  if (done === undefined) {
+    status.textContent = "The update could not be installed. See the activity log.";
+    button.disabled = false;
+  }
+}
+
 function bindControls(): void {
   el<HTMLSelectElement>("ua-preset").addEventListener("change", (event) => {
     settings.userAgentPreset = (event.target as HTMLSelectElement).value;
@@ -417,6 +474,8 @@ function bindControls(): void {
   bindCheckbox("set-notifications", "nativeNotifications");
   bindCheckbox("set-badge", "badgeUnreadCount");
   bindCheckbox("set-autostart", "autostart");
+
+  el<HTMLButtonElement>("check-updates").addEventListener("click", () => void checkForUpdates());
 
   el<HTMLButtonElement>("open-settings").addEventListener("click", () => void show(null));
 

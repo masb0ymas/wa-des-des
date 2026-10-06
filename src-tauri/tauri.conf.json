@@ -39,8 +39,17 @@
       "capabilities": ["launcher", "session"]
     }
   },
+  "plugins": {
+    "updater": {
+      "endpoints": [
+        "https://github.com/masb0ymas/wa-des-des/releases/latest/download/latest.json"
+      ],
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDJDNzkzQjVENDlCODBFNTcKUldSWERyaEpYVHQ1TEhKbENZcmIzL0dObnlDblJXVS96YmdzME5wM0dGb1ZxOXpYZzFBL2ZVZnAK"
+    }
+  },
   "bundle": {
     "active": true,
+    "createUpdaterArtifacts": true,
     "targets": ["app", "dmg", "nsis", "msi", "deb", "rpm", "appimage"],
     "icon": [
       "icons/32x32.png",

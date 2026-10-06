@@ -21,6 +21,9 @@
     "allow-open-chat",
     "allow-reload-session",
     "allow-clear-session-data",
-    "allow-test-notification"
+    "allow-test-notification",
+    "allow-check-for-updates",
+    "allow-install-update",
+    "updater:default"
   ]
 }

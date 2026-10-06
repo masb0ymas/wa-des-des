@@ -28,6 +28,7 @@ use tauri::{
 };
 use tauri_plugin_autostart::ManagerExt as _;
 use tauri_plugin_notification::NotificationExt as _;
+use tauri_plugin_updater::UpdaterExt;
 use tauri_plugin_window_state::StateFlags;
 
 mod settings;
@@ -610,6 +611,59 @@ fn test_notification(app: AppHandle) -> Result<(), String> {
         .map_err(err)
 }
 
+/// The installed version and, when the update endpoint offers a newer release, that release.
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct UpdateCheck {
+    current_version: String,
+    update: Option<UpdateSummary>,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct UpdateSummary {
+    version: String,
+    notes: String,
+}
+
+/// Asks the update endpoint whether a newer release is published.
+#[tauri::command]
+async fn check_for_updates(app: AppHandle) -> Result<UpdateCheck, String> {
+    let update = app.updater().map_err(err)?.check().await.map_err(err)?;
+    Ok(UpdateCheck {
+        current_version: app.package_info().version.to_string(),
+        update: update.map(|update| UpdateSummary {
+            version: update.version,
+            notes: update.body.unwrap_or_default(),
+        }),
+    })
+}
+
+/// Downloads the newer release, installs it and restarts the app. Progress is reported through
+/// `update://progress` events as `{ received, total }` byte counts (`total` may be null).
+#[tauri::command]
+async fn install_update(app: AppHandle) -> Result<(), String> {
+    let Some(update) = app.updater().map_err(err)?.check().await.map_err(err)? else {
+        return Err("no update is available".into());
+    };
+    let handle = app.clone();
+    update
+        .download_and_install(
+            move |received, total| {
+                let _ = handle.emit_to(
+                    MAIN_LABEL,
+                    "update://progress",
+                    json!({ "received": received, "total": total }),
+                );
+            },
+            || {},
+        )
+        .await
+        .map_err(err)?;
+    // Never returns: the process replaces itself with the newly installed binary.
+    app.restart();
+}
+
 /// Parses a compile-time-known WhatsApp URL.
 ///
 /// The literals above are constant, so a failure is a programming error rather than user input;
@@ -1024,6 +1078,7 @@ pub fn run() {
     builder
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_notification::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(
             tauri_plugin_window_state::Builder::new()
                 .with_state_flags(StateFlags::SIZE | StateFlags::POSITION)
@@ -1050,6 +1105,8 @@ pub fn run() {
             reload_session,
             clear_session_data,
             test_notification,
+            check_for_updates,
+            install_update,
         ])
         .setup(|app| {
             let handle = app.handle().clone();

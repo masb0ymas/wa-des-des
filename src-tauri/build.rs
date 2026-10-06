@@ -17,6 +17,8 @@ fn main() {
                 "reload_session",
                 "clear_session_data",
                 "test_notification",
+                "check_for_updates",
+                "install_update",
             ]),
         ),
     )
