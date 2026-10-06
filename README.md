@@ -1,4 +1,4 @@
-# WA Des Des
+# WaDesk
 
 Desktop shell for WhatsApp Web built with Tauri v2. One window: a dock on the left edge lists the
 accounts, and each account is its own native webview loading `https://web.whatsapp.com` next to it.
@@ -18,15 +18,15 @@ lives.
 Tauri does not ship a browser. It embeds the OS webview, so the same app reports a different
 `navigator.userAgent` on every platform:
 
-| Platform | Engine | What the engine reports by default | WhatsApp Web |
-|----------|--------|------------------------------------|--------------|
-| Windows 10/11 | WebView2 (Chromium/Edge) | `… Chrome/154.0.0.0 Safari/537.36 Edg/154.0.0.0` | accepted |
-| macOS | WKWebView (Safari/WebKit) | `… AppleWebKit/605.1.15 … Version/26.5 Safari/605.1.15` | accepted |
-| Linux | WebKitGTK | `… AppleWebKit/605.1.15 …` plus a distro token, or a bare `WebKitGTK/2.x` | **rejected** |
+| Platform      | Engine                    | What the engine reports by default                                        | WhatsApp Web |
+| ------------- | ------------------------- | ------------------------------------------------------------------------- | ------------ |
+| Windows 10/11 | WebView2 (Chromium/Edge)  | `… Chrome/154.0.0.0 Safari/537.36 Edg/154.0.0.0`                          | accepted     |
+| macOS         | WKWebView (Safari/WebKit) | `… AppleWebKit/605.1.15 … Version/26.5 Safari/605.1.15`                   | accepted     |
+| Linux         | WebKitGTK                 | `… AppleWebKit/605.1.15 …` plus a distro token, or a bare `WebKitGTK/2.x` | **rejected** |
 
 WhatsApp Web gates its login page on the UA string. WebKitGTK frequently produces a string with no
-recognised engine token, and the page answers with *"WhatsApp Web is not supported in your
-browser"* instead of the QR/pairing flow. Setting a recent Chrome or Safari UA is the standard
+recognised engine token, and the page answers with _"WhatsApp Web is not supported in your
+browser"_ instead of the QR/pairing flow. Setting a recent Chrome or Safari UA is the standard
 workaround, and it is what this app does by default on Linux.
 
 The UA is installed on the webview **before the first navigation**. None of the three engines
@@ -146,11 +146,12 @@ inherit an accessibility baseline from. The rules the markup holds itself to:
   - The **native window** theme is set too, so the title bar and native form controls match. It is
     best-effort; where the platform ignores it the page still looks right.
 
-  With the choice set to `system`, `data-theme` is *removed* rather than set to the resolved value.
+  With the choice set to `system`, `data-theme` is _removed_ rather than set to the resolved value.
   That keeps the `prefers-color-scheme` media query in charge, so the stylesheet itself picks up an
   OS change on the very first paint — before the module script runs. `--on-accent` is the one token
   that is not interchangeable between themes: dark ink on the dark accent is 6.3:1, but that same
   ink on the light accent would be 3.9:1, so light mode needs white.
+
 - **Grid panes meet edge to edge.** The multi-account view tiles account webviews with no gap
   between them, and the last column/row is measured from the content edge rather than being given
   the computed cell size. An odd content width divides into a fractional cell (1117 / 2 = 558.5)
@@ -187,7 +188,7 @@ minus the panic.
 
 It is enabled, as documented, but be aware of its scope in this SDK:
 
-- The Rust SDK has no HTTP-server integration, so the *"capture user IPs and sensitive headers"*
+- The Rust SDK has no HTTP-server integration, so the _"capture user IPs and sensitive headers"_
   behaviour the option is usually reached for does not exist in a desktop app — nothing sends
   headers.
 - What it actually gates in `sentry` 0.49 is attaching the current user's id/email to **metrics**

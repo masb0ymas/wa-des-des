@@ -1,8 +1,8 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "WA Des Des",
+  "productName": "WaDesk",
   "version": "0.1.0",
-  "identifier": "app.wa-des-des.desktop",
+  "identifier": "app.WaDesk.desktop",
   "build": {
     "beforeDevCommand": "pnpm dev",
     "beforeBuildCommand": "pnpm build",
@@ -15,7 +15,7 @@
     "windows": [
       {
         "label": "main",
-        "title": "WA Des Des",
+        "title": "WaDesk",
         "width": 1180,
         "height": 820,
         "minWidth": 520,
@@ -52,8 +52,8 @@
     "category": "SocialNetworking",
     "shortDescription": "WhatsApp Web desktop client",
     "longDescription": "Desktop shell for WhatsApp Web with multiple isolated accounts in one window, a configurable webview User-Agent, native notifications and a tray icon.",
-    "copyright": "Copyright (c) 2026 wa-des-des contributors",
-    "publisher": "wa-des-des",
+    "copyright": "Copyright (c) 2026 WaDesk contributors",
+    "publisher": "WaDesk",
     "macOS": {
       "minimumSystemVersion": "11.0",
       "infoPlist": "Info.plist"

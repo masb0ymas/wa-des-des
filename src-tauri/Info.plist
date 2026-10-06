@@ -25,15 +25,15 @@
     notes, calls and the QR-code scanner crash instead of degrading gracefully.
   -->
   <key>NSMicrophoneUsageDescription</key>
-  <string>WA Des Des uses the microphone for WhatsApp voice messages and calls.</string>
+  <string>WaDesk uses the microphone for WhatsApp voice messages and calls.</string>
   <key>NSCameraUsageDescription</key>
-  <string>WA Des Des uses the camera for WhatsApp video calls and QR-code scanning.</string>
+  <string>WaDesk uses the camera for WhatsApp video calls and QR-code scanning.</string>
 
   <!-- Media keys / Now Playing integration for voice messages. -->
   <key>NSAppleMusicUsageDescription</key>
-  <string>WA Des Des plays WhatsApp voice messages and notification sounds.</string>
+  <string>WaDesk plays WhatsApp voice messages and notification sounds.</string>
 
   <key>NSHumanReadableCopyright</key>
-  <string>Copyright (c) 2026 wa-des-des contributors</string>
+  <string>Copyright (c) 2026 WaDesk contributors</string>
 </dict>
 </plist>

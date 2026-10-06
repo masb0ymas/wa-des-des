@@ -604,7 +604,7 @@ fn test_notification(app: AppHandle) -> Result<(), String> {
 
     app.notification()
         .builder()
-        .title("WA Des Des")
+        .title("WaDesk")
         .body("Native notifications are wired up.")
         .show()
         .map_err(err)
@@ -853,7 +853,7 @@ fn build_tray(app: &AppHandle) -> tauri::Result<()> {
 
     let mut builder = TrayIconBuilder::with_id(TRAY_ID)
         .menu(&menu)
-        .tooltip("WA Des Des")
+        .tooltip("WaDesk")
         // On Linux/Windows the left click is the natural "show the app" gesture, so the menu is
         // bound to the right click only.
         .show_menu_on_left_click(false)
@@ -1086,7 +1086,7 @@ pub fn run() {
             // The event loop failing is unrecoverable, but it must not disappear: report it, then
             // fail the process with a non-zero status.
             telemetry::capture_error(&error, "tauri event loop failed");
-            panic!("error while running wa-des-des: {error}");
+            panic!("error while running WaDesk: {error}");
         });
 }
 

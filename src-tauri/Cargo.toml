@@ -1,8 +1,8 @@
 [package]
-name = "wa-des-des"
+name = "WaDesk"
 version = "0.1.0"
 description = "WhatsApp Web desktop client"
-authors = ["wa-des-des contributors"]
+authors = ["WaDesk contributors"]
 edition = "2021"
 rust-version = "1.77.2"
 
