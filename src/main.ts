@@ -1,5 +1,13 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
+import {
+  applyTheme,
+  isThemeChoice,
+  nextThemeChoice,
+  themeLabel,
+  watchSystemTheme,
+  type ThemeChoice,
+} from "./theme";
 
 interface Supports {
   tray: boolean;
@@ -34,6 +42,7 @@ interface Settings {
   accounts: Account[];
   gridCols: number;
   gridRows: number;
+  theme: ThemeChoice;
 }
 
 interface UaOption {
@@ -341,6 +350,27 @@ async function subscribeSessionEvents(): Promise<void> {
   });
 }
 
+/** Paints the dock button and the settings select to match the current choice. */
+function renderTheme(): void {
+  const choice = settings.theme;
+
+  const button = el<HTMLButtonElement>("cycle-theme");
+  button.setAttribute("aria-label", `Theme: ${themeLabel(choice)}`);
+  button.title = `Theme: ${themeLabel(choice)}`;
+  // One glyph per mode; the system glyph stays for `system`.
+  const icons: Array<[string, boolean]> = [
+    ["icon-system", choice === "system"],
+    ["icon-light", choice === "light"],
+    ["icon-dark", choice === "dark"],
+  ];
+  for (const [className, visible] of icons) {
+    button.querySelector<SVGElement>(`.${className}`)?.toggleAttribute("hidden", !visible);
+  }
+
+  const select = el<HTMLSelectElement>("set-theme");
+  select.value = choice;
+}
+
 function bindCheckbox(id: string, key: "nativeNotifications" | "badgeUnreadCount" | "autostart"): void {
   const input = el<HTMLInputElement>(id);
   input.checked = settings[key];
@@ -361,6 +391,22 @@ function bindControls(): void {
     settings.customUserAgent = (event.target as HTMLInputElement).value.trim();
     renderUserAgent();
     void persist();
+  });
+
+  el<HTMLSelectElement>("set-theme").addEventListener("change", (event) => {
+    const value = (event.target as HTMLSelectElement).value;
+    if (!isThemeChoice(value)) return;
+    settings.theme = value;
+    applyTheme(value);
+    renderTheme();
+    void persist().then(() => log("info", `theme = ${value}`));
+  });
+
+  el<HTMLButtonElement>("cycle-theme").addEventListener("click", () => {
+    settings.theme = nextThemeChoice(settings.theme);
+    applyTheme(settings.theme);
+    renderTheme();
+    void persist().then(() => log("info", `theme = ${settings.theme}`));
   });
 
   bindCheckbox("set-notifications", "nativeNotifications");
@@ -469,10 +515,19 @@ async function main(): Promise<void> {
     accounts: [{ id: "default", name: "Account 1" }],
     gridCols: 2,
     gridRows: 1,
+    theme: "system",
   };
 
   // The backend shows the first account on startup.
   active = selected = settings.accounts[0]?.id ?? "";
+
+  applyTheme(settings.theme);
+  renderTheme();
+  // Re-resolve only while the choice is `system`; an explicit choice ignores the OS.
+  watchSystemTheme(
+    () => settings.theme,
+    () => renderTheme(),
+  );
 
   renderUserAgent();
   renderAccounts();
@@ -483,7 +538,12 @@ async function main(): Promise<void> {
 }
 
 /** The overlay webview: nothing but the "Add account" dialog, closed by tearing the webview down. */
-function runAddDialog(): void {
+async function runAddDialog(): Promise<void> {
+  // The overlay is a separate webview that loads only the dialog, so it never runs `main()`. It
+  // still has to paint the right theme: a light dialog over a dark window would be jarring, and the
+  // bootstrap below sets `data-theme` on this document, not on the main one.
+  await applyStoredTheme();
+
   const dialog = el<HTMLDialogElement>("add-account-dialog");
   const name = el<HTMLInputElement>("add-account-name");
   const error = el<HTMLParagraphElement>("add-account-error");
@@ -513,9 +573,24 @@ function runAddDialog(): void {
   });
 
   dialog.showModal();
-  // showModal() focuses the first focusable child; be explicit so the caret lands in the field.
-  name.focus();
+
+  // `autofocus` on the field is what the dialog focusing steps look for, but focus assigned while
+  // the document is still loading is discarded by the focus fixup rule — the dialog itself ended up
+  // focused instead. Re-assert after load so the caret reliably lands in the field.
+  const focusName = () => name.focus();
+  focusName();
+  if (document.readyState !== "complete") {
+    window.addEventListener("load", focusName, { once: true });
+  }
 }
 
-if (location.hash === "#add-account-dialog") runAddDialog();
+/** Reads the stored choice and paints this document before anything is shown. */
+async function applyStoredTheme(): Promise<void> {
+  const stored = await call<Settings>("get_settings");
+  if (!stored) return;
+  settings = stored;
+  applyTheme(stored.theme);
+}
+
+if (location.hash === "#add-account-dialog") void runAddDialog();
 else void main();

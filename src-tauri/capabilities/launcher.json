@@ -6,6 +6,7 @@
   "webviews": ["main", "overlay"],
   "permissions": [
     "core:default",
+    "core:window:allow-set-theme",
     "allow-runtime-info",
     "allow-get-settings",
     "allow-set-settings",

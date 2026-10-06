@@ -6,6 +6,11 @@ use crate::ua;
 
 const FILE_NAME: &str = "settings.json";
 
+/// Theme used when nothing has been chosen: follow the OS.
+fn default_theme() -> String {
+    "system".to_string()
+}
+
 /// Id of the first account. It keeps the webview's default data store, so a login made before
 /// multi-account support existed survives the upgrade.
 pub const DEFAULT_ACCOUNT_ID: &str = "default";
@@ -67,6 +72,9 @@ pub struct Settings {
     pub autostart: bool,
     /// Webview zoom factor.
     pub zoom: f64,
+    /// `system`, `light` or `dark`. `system` follows the OS preference.
+    #[serde(default = "default_theme")]
+    pub theme: String,
     /// Linked accounts, in dock order. Defaulted so a pre-multi-account file still parses.
     #[serde(default)]
     pub accounts: Vec<Account>,
@@ -97,6 +105,7 @@ impl Settings {
             badge_unread_count: true,
             autostart: false,
             zoom: 1.0,
+            theme: default_theme(),
             accounts: vec![Account {
                 id: DEFAULT_ACCOUNT_ID.to_string(),
                 name: "Account 1".to_string(),
@@ -111,6 +120,9 @@ impl Settings {
     pub fn normalize(mut self, platform: &str) -> Self {
         if !ua::is_known_preset(&self.user_agent_preset) {
             self.user_agent_preset = ua::default_preset(platform).to_string();
+        }
+        if !matches!(self.theme.as_str(), "system" | "light" | "dark") {
+            self.theme = default_theme();
         }
         if !self.zoom.is_finite() {
             self.zoom = 1.0;
@@ -213,6 +225,49 @@ mod tests {
 
         settings.zoom = f64::NAN;
         assert_eq!(settings.normalize("linux").zoom, 1.0);
+    }
+
+    #[test]
+    fn theme_defaults_to_following_the_system() {
+        assert_eq!(Settings::for_platform("linux").theme, "system");
+    }
+
+    /// A settings file written before the theme existed must still load, with the theme defaulted.
+    /// Parsing is otherwise strict, so a missing non-defaulted field would discard every setting.
+    #[test]
+    fn a_file_without_a_theme_still_loads_and_defaults_to_system() {
+        let legacy = r#"{
+            "userAgentPreset": "safari-macos",
+            "customUserAgent": "",
+            "nativeNotifications": true,
+            "badgeUnreadCount": false,
+            "autostart": false,
+            "zoom": 1.25,
+            "accounts": [{ "id": "default", "name": "AS" }],
+            "gridCols": 2,
+            "gridRows": 1
+        }"#;
+
+        let parsed: Settings = serde_json::from_str(legacy).expect("legacy file parses");
+        assert_eq!(parsed.theme, "system");
+        // The rest of the file is not thrown away.
+        assert_eq!(parsed.user_agent_preset, "safari-macos");
+        assert_eq!(parsed.zoom, 1.25);
+        assert_eq!(parsed.accounts.len(), 1);
+        assert!(!parsed.badge_unread_count);
+    }
+
+    #[test]
+    fn normalize_rejects_an_unknown_theme() {
+        let mut settings = Settings::for_platform("linux");
+        settings.theme = "solarized".into();
+        assert_eq!(settings.normalize("linux").theme, "system");
+
+        for valid in ["system", "light", "dark"] {
+            let mut settings = Settings::for_platform("linux");
+            settings.theme = valid.into();
+            assert_eq!(settings.normalize("linux").theme, valid);
+        }
     }
 
     #[test]

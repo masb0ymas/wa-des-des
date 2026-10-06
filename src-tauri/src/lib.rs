@@ -22,6 +22,7 @@ use std::sync::Mutex;
 use tauri::menu::{Menu, MenuItem, PredefinedMenuItem};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
 use tauri::webview::WebviewBuilder;
+use tauri::utils::Theme;
 use tauri::{
     AppHandle, Emitter, Listener, LogicalPosition, LogicalSize, Manager, Url, Webview, WebviewUrl, Window,
 };
@@ -82,6 +83,18 @@ fn platform() -> Platform {
             id: "unknown",
             engine: "webview",
         }
+    }
+}
+
+/// Maps the stored theme choice onto the native window theme.
+///
+/// `system` becomes `None`, which is how the window is told to follow the OS again. `Theme` is
+/// non-exhaustive, so the match needs a wildcard arm.
+fn native_theme(choice: &str) -> Option<Theme> {
+    match choice {
+        "light" => Some(Theme::Light),
+        "dark" => Some(Theme::Dark),
+        _ => None,
     }
 }
 
@@ -353,6 +366,15 @@ async fn set_settings(app: AppHandle, mut settings: Settings) -> Result<Settings
         }
     }
 
+    // The native chrome (title bar, scrollbars) follows the choice; the page owns the colours.
+    // `None` hands control back to the system. Not every platform honours this, which is why the
+    // page applies its own theme regardless.
+    if settings.theme != previous.theme {
+        if let Some(window) = app.get_window(MAIN_LABEL) {
+            let _ = window.set_theme(native_theme(&settings.theme));
+        }
+    }
+
     // The UA is baked into a webview at creation time, so it only takes effect on a rebuild.
     if settings.user_agent() != previous.user_agent() {
         for (_, webview) in account_webviews(&app) {
@@ -390,6 +412,8 @@ async fn open_add_dialog(app: AppHandle) -> Result<(), String> {
     }
     let window = main_window(&app).map_err(err)?;
     let (_, size) = content_bounds(&window).map_err(err)?;
+    // The dialog layer is a separate webview, so the native theme has to be applied to it too:
+    // a light dialog over a dark window would otherwise get the wrong colour scheme.
     let builder = WebviewBuilder::new(
         OVERLAY_LABEL,
         WebviewUrl::App("index.html#add-account-dialog".into()),
@@ -1024,6 +1048,10 @@ pub fn run() {
             for account in &settings.accounts {
                 build_account_webview(&handle, account, &settings)?;
             }
+            if let Some(window) = handle.get_window(MAIN_LABEL) {
+                let _ = window.set_theme(native_theme(&settings.theme));
+            }
+
             show_account(&handle, settings.accounts.first().map(|account| account.id.as_str()));
 
             Ok(())
@@ -1167,6 +1195,16 @@ mod tests {
             let (_, size) = grid_cell(0, cols, rows, origin, LogicalSize::new(0.0, 0.0));
             assert_eq!((size.width, size.height), (0.0, 0.0), "{cols}x{rows}");
         }
+    }
+
+    #[test]
+    fn theme_choice_maps_to_the_native_theme() {
+        assert_eq!(native_theme("light"), Some(Theme::Light));
+        assert_eq!(native_theme("dark"), Some(Theme::Dark));
+        // Anything else, `system` included, hands control back to the OS.
+        assert_eq!(native_theme("system"), None);
+        assert_eq!(native_theme(""), None);
+        assert_eq!(native_theme("solarized"), None);
     }
 
     #[test]

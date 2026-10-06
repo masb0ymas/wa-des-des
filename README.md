@@ -137,6 +137,20 @@ inherit an accessibility baseline from. The rules the markup holds itself to:
 - **One live region** (`#status`, `role="status"`) announces a full sentence for async changes such
   as unread totals — not a bare number, and not one region per badge.
 - **Reduced motion** disables the dialog entrance animation and every transition.
+- **Themes.** Light and dark share one token set; only the palette blocks differ. Two mechanisms
+  cooperate, because neither covers everything:
+  - The **page** owns the colours, through `data-theme` on `<html>`. This is the only mechanism that
+    reaches every webview: the account webviews are separate views loading WhatsApp Web and the
+    overlay is a third one, and there is no cross-platform way to set a theme on a webview
+    individually (wry's `with_theme` is WebView2-only).
+  - The **native window** theme is set too, so the title bar and native form controls match. It is
+    best-effort; where the platform ignores it the page still looks right.
+
+  With the choice set to `system`, `data-theme` is *removed* rather than set to the resolved value.
+  That keeps the `prefers-color-scheme` media query in charge, so the stylesheet itself picks up an
+  OS change on the very first paint — before the module script runs. `--on-accent` is the one token
+  that is not interchangeable between themes: dark ink on the dark accent is 6.3:1, but that same
+  ink on the light accent would be 3.9:1, so light mode needs white.
 - **Grid panes meet edge to edge.** The multi-account view tiles account webviews with no gap
   between them, and the last column/row is measured from the content edge rather than being given
   the computed cell size. An odd content width divides into a fractional cell (1117 / 2 = 558.5)
