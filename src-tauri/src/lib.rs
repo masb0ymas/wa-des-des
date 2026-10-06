@@ -30,6 +30,7 @@ use tauri_plugin_notification::NotificationExt as _;
 use tauri_plugin_window_state::StateFlags;
 
 mod settings;
+mod telemetry;
 use settings::{Account, Settings, ACCOUNT_LABEL_PREFIX, DEFAULT_ACCOUNT_ID};
 
 /// Label of the only window, and of its bundled UI webview.
@@ -967,6 +968,10 @@ fn pin_dev_identity() {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    // Bound for the whole process: dropping the guard shuts the transport down and loses any event
+    // still queued. Installing it first means a panic during setup is already reported.
+    let _telemetry = telemetry::init();
+
     #[cfg(target_os = "macos")]
     pin_dev_identity();
 
@@ -1035,7 +1040,12 @@ pub fn run() {
             _ => {}
         })
         .run(tauri::generate_context!())
-        .expect("error while running wa-des-des");
+        .unwrap_or_else(|error| {
+            // The event loop failing is unrecoverable, but it must not disappear: report it, then
+            // fail the process with a non-zero status.
+            telemetry::capture_error(&error, "tauri event loop failed");
+            panic!("error while running wa-des-des: {error}");
+        });
 }
 
 #[cfg(test)]

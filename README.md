@@ -143,6 +143,57 @@ inherit an accessibility baseline from. The rules the markup holds itself to:
   and the engine rounds each view up to a whole pixel, so equal-sized cells both left a 1px seam
   and pushed the final pane 1px past the window edge.
 
+## Error reporting
+
+Sentry is wired up but **off by default**: with no DSN the SDK builds a disabled client, so nothing
+is sent and no network call is made.
+
+```bash
+WA_SENTRY_DSN="https://<key>@o<org>.ingest.sentry.io/<project>" pnpm tauri dev
+```
+
+The DSN is read from `WA_SENTRY_DSN` rather than `SENTRY_DSN`, so an unrelated `SENTRY_DSN` already
+in the environment cannot silently turn reporting on. It is deliberately not compiled into the
+binary: a DSN is per-deployment, and a baked-in one cannot be pointed at a staging project without a
+rebuild.
+
+A missing, blank or malformed DSN disables reporting and logs one line — it never crashes the app.
+That is worth stating because the documented tuple form is unsafe here:
+
+```rust
+// Panics at startup on a malformed DSN: the tuple impl calls .expect("invalid value for DSN").
+sentry::init(("<PII>", ClientOptions { ..Default::default() }))
+```
+
+`ClientOptions` is also `#[non_exhaustive]` in `sentry` 0.49, so that struct literal no longer
+compiles; `telemetry.rs` uses the setters and assigns `options.dsn` directly, which is equivalent
+minus the panic.
+
+### What `send_default_pii` does here
+
+It is enabled, as documented, but be aware of its scope in this SDK:
+
+- The Rust SDK has no HTTP-server integration, so the *"capture user IPs and sensitive headers"*
+  behaviour the option is usually reached for does not exist in a desktop app — nothing sends
+  headers.
+- What it actually gates in `sentry` 0.49 is attaching the current user's id/email to **metrics**
+  as attributes.
+- `username` is attached independently of this flag and stays empty unless something calls
+  `set_user`. This app never does, so no account name or phone number reaches Sentry.
+
+Consequence for future code: with PII enabled, do not put account names, phone numbers or message
+content into `capture_message`, `capture_error` or breadcrumbs. `telemetry::capture_error` is the
+supported entry point; it walks the error's source chain and tags the event with platform, arch and
+webview engine.
+
+### Panic reporting and `panic = "abort"`
+
+The release profile sets `panic = "abort"`. `sentry-panic` captures the panic and flushes inside its
+hook, which still runs under abort, so panic events are delivered. The difference is that an abort
+does not unwind, so the process dies immediately after the flush instead of unwinding the stack.
+`debug-images` is disabled: the release profile strips symbols, which would leave that integration
+with nothing to resolve.
+
 ## Known limitations
 
 - **Multi-webview is a Tauri `unstable` feature.** `Window::add_child` may change between minor
