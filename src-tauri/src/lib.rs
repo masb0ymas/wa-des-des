@@ -41,8 +41,10 @@ const DOCK_WIDTH: f64 = 64.0;
 /// Height of the toolbar above the grid in the multi-account view. Must match `--gridbar` in
 /// `src/styles.css`.
 const GRID_BAR_HEIGHT: f64 = 44.0;
-/// Gap between grid cells; the UI background shows through it as a divider.
-const GRID_GAP: f64 = 1.0;
+/// Gap between grid cells. Zero: the account panes must meet edge to edge. The app background is
+/// near-black and WhatsApp Web is white, so even a 1px gap paints a dark seam between two panes,
+/// which reads as a divider the user did not ask for.
+const GRID_GAP: f64 = 0.0;
 /// Tray icon id.
 const TRAY_ID: &str = "wa-tray";
 
@@ -204,12 +206,22 @@ fn grid_cell(
     let (cols, rows) = (cols as f64, rows as f64);
     let width = ((area.width - GRID_GAP * (cols - 1.0)) / cols).max(0.0);
     let height = ((area.height - GRID_BAR_HEIGHT - GRID_GAP * (rows - 1.0)) / rows).max(0.0);
+
+    let x = origin.x + col * (width + GRID_GAP);
+    let y = origin.y + GRID_BAR_HEIGHT + row * (height + GRID_GAP);
+
+    // The last column and row take whatever is left instead of the computed cell size. An odd
+    // content width divides into a fractional cell (1117 / 2 = 558.5), and the engine rounds each
+    // view up to a whole pixel: two 558.5 cells became 2 x 558 and the second pane ran 1px past the
+    // content edge. Measuring the last cell from the edge keeps the tiling exact for any size.
+    let right = origin.x + area.width;
+    let bottom = origin.y + area.height;
     (
-        LogicalPosition::new(
-            origin.x + col * (width + GRID_GAP),
-            origin.y + GRID_BAR_HEIGHT + row * (height + GRID_GAP),
+        LogicalPosition::new(x, y),
+        LogicalSize::new(
+            if col + 1.0 >= cols { (right - x).max(0.0) } else { width },
+            if row + 1.0 >= rows { (bottom - y).max(0.0) } else { height },
         ),
-        LogicalSize::new(width, height),
     )
 }
 
@@ -1083,24 +1095,68 @@ mod tests {
     }
 
     #[test]
-    fn grid_cells_tile_the_area_below_the_toolbar() {
+    /// The two panes of the default 2x1 view must meet edge to edge: no seam, no overflow.
+    #[test]
+    fn two_panes_meet_edge_to_edge() {
         let origin = LogicalPosition::new(DOCK_WIDTH, 0.0);
-        let area = LogicalSize::new(1001.0, GRID_BAR_HEIGHT + 601.0);
+        // Odd width, the case that used to leave a 1px gap and run 1px past the edge.
+        let area = LogicalSize::new(1117.0, 820.0);
 
-        let (position, size) = grid_cell(0, 2, 2, origin, area);
-        assert_eq!((position.x, position.y), (DOCK_WIDTH, GRID_BAR_HEIGHT));
-        assert_eq!((size.width, size.height), (500.0, 300.0));
+        let (left_pos, left) = grid_cell(0, 2, 1, origin, area);
+        let (right_pos, right) = grid_cell(1, 2, 1, origin, area);
 
-        // Last cell of a 2x2 grid: second column, second row, ending exactly at the area's edge.
-        let (position, size) = grid_cell(3, 2, 2, origin, area);
-        assert_eq!(position.x + size.width, DOCK_WIDTH + area.width);
-        assert_eq!(position.y + size.height, area.height);
+        assert_eq!(left_pos.x, DOCK_WIDTH);
+        assert_eq!(right_pos.x, left_pos.x + left.width, "no gap between panes");
+        assert_eq!(right_pos.x + right.width, DOCK_WIDTH + area.width, "last pane ends on the edge");
+        assert_eq!(left_pos.y, GRID_BAR_HEIGHT);
+        assert_eq!(left.height, area.height - GRID_BAR_HEIGHT);
+        assert_eq!(right.height, left.height);
+    }
 
-        // A single cell is the whole area minus the toolbar, and tiny windows never go negative.
-        let (_, size) = grid_cell(0, 1, 1, origin, area);
-        assert_eq!((size.width, size.height), (1001.0, 601.0));
-        let (_, size) = grid_cell(0, 4, 4, origin, LogicalSize::new(0.0, 0.0));
-        assert_eq!((size.width, size.height), (0.0, 0.0));
+    /// Whatever the window size, the cells cover the content area exactly once.
+    #[test]
+    fn grid_tiles_the_area_without_gaps_or_overflow() {
+        let origin = LogicalPosition::new(DOCK_WIDTH, 0.0);
+        for (w, h) in [(1001.0, 645.0), (1117.0, 820.0), (853.0, 501.0), (400.0, 300.0)] {
+            let area = LogicalSize::new(w, h);
+            for cols in 1..=4u32 {
+                for rows in 1..=4u32 {
+                    let mut cells = Vec::new();
+                    for index in 0..(cols * rows) as usize {
+                        cells.push(grid_cell(index, cols, rows, origin, area));
+                    }
+
+                    for (i, (pos, size)) in cells.iter().enumerate() {
+                        let (col, row) = (i as u32 % cols, i as u32 / cols);
+                        // Every cell starts where the previous one in its axis ended. Compared with
+                        // a tolerance: cells carry fractional sizes, so summing them drifts in the
+                        // last bits of an f64.
+                        let near = |a: f64, b: f64| (a - b).abs() < 0.001;
+                        if col > 0 {
+                            let (prev_pos, prev_size) = &cells[i - 1];
+                            assert!(near(pos.x, prev_pos.x + prev_size.width), "{cols}x{rows} w={w} col {col}");
+                        }
+                        if row > 0 {
+                            let (prev_pos, prev_size) = &cells[i - cols as usize];
+                            assert!(near(pos.y, prev_pos.y + prev_size.height), "{cols}x{rows} h={h} row {row}");
+                        }
+                        // And nothing leaves the content area.
+                        assert!(pos.x >= origin.x - 0.001 && pos.x + size.width <= origin.x + w + 0.001);
+                        assert!(pos.y >= GRID_BAR_HEIGHT - 0.001 && pos.y + size.height <= h + 0.001);
+                    }
+                }
+            }
+        }
+    }
+
+    /// Tiny windows must never produce a negative size.
+    #[test]
+    fn degenerate_area_clamps_to_zero() {
+        let origin = LogicalPosition::new(DOCK_WIDTH, 0.0);
+        for (cols, rows) in [(1u32, 1u32), (2, 1), (4, 4)] {
+            let (_, size) = grid_cell(0, cols, rows, origin, LogicalSize::new(0.0, 0.0));
+            assert_eq!((size.width, size.height), (0.0, 0.0), "{cols}x{rows}");
+        }
     }
 
     #[test]

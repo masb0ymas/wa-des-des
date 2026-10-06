@@ -137,6 +137,11 @@ inherit an accessibility baseline from. The rules the markup holds itself to:
 - **One live region** (`#status`, `role="status"`) announces a full sentence for async changes such
   as unread totals — not a bare number, and not one region per badge.
 - **Reduced motion** disables the dialog entrance animation and every transition.
+- **Grid panes meet edge to edge.** The multi-account view tiles account webviews with no gap
+  between them, and the last column/row is measured from the content edge rather than being given
+  the computed cell size. An odd content width divides into a fractional cell (1117 / 2 = 558.5)
+  and the engine rounds each view up to a whole pixel, so equal-sized cells both left a 1px seam
+  and pushed the final pane 1px past the window edge.
 
 ## Known limitations
 
