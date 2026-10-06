@@ -40,8 +40,6 @@ interface Settings {
   autostart: boolean;
   zoom: number;
   accounts: Account[];
-  gridCols: number;
-  gridRows: number;
   theme: ThemeChoice;
 }
 
@@ -146,6 +144,13 @@ function renderUserAgent(): void {
 /** Unread counters reported by the account webviews, keyed by webview label (`wa-<id>`). */
 const unread = new Map<string, number>();
 
+/** Mirrors `grid_shape` in src-tauri/src/lib.rs: near-square tiling capped at 4 per side. */
+function gridCells(count: number): number {
+  const cols = Math.min(4, Math.max(1, Math.ceil(Math.sqrt(count))));
+  const rows = Math.min(4, Math.ceil(count / cols));
+  return cols * rows;
+}
+
 /** Account shown in the content area; `null` while the settings panel is open. */
 let active: string | null = null;
 /** Multi-account view: several accounts tiled in a grid instead of the single `active` one. */
@@ -200,7 +205,7 @@ function renderAccounts(): void {
   el<HTMLButtonElement>("open-settings").setAttribute("aria-current", String(!grid && active === null));
   el<HTMLButtonElement>("open-grid").setAttribute("aria-current", String(grid));
   document.body.classList.toggle("grid", grid);
-  const cells = settings.gridCols * settings.gridRows;
+  const cells = gridCells(settings.accounts.length);
   el<HTMLElement>("grid-note").textContent =
     settings.accounts.length > cells
       ? `Showing ${cells} of ${settings.accounts.length} accounts, in dock order`
@@ -419,21 +424,10 @@ function bindControls(): void {
     void call("show_grid").then(() => {
       grid = true;
       renderAccounts();
-      const cells = settings.gridCols * settings.gridRows;
+      const cells = gridCells(settings.accounts.length);
       announce(`Multi-account view, showing ${Math.min(cells, settings.accounts.length)} of ${settings.accounts.length} accounts`);
     });
   });
-
-  for (const [id, key] of [["grid-cols", "gridCols"], ["grid-rows", "gridRows"]] as const) {
-    const input = el<HTMLInputElement>(id);
-    input.value = String(settings[key]);
-    input.addEventListener("change", () => {
-      settings[key] = Math.min(4, Math.max(1, Math.round(Number(input.value)) || 1));
-      input.value = String(settings[key]);
-      // The backend re-tiles the grid as part of saving.
-      void persist().then(renderAccounts);
-    });
-  }
 
   el<HTMLButtonElement>("add-account").addEventListener("click", () => void call("open_add_dialog"));
 
@@ -513,8 +507,6 @@ async function main(): Promise<void> {
     autostart: false,
     zoom: 1,
     accounts: [{ id: "default", name: "Account 1" }],
-    gridCols: 2,
-    gridRows: 1,
     theme: "system",
   };
 

@@ -208,6 +208,16 @@ fn content_bounds(window: &Window) -> tauri::Result<(LogicalPosition<f64>, Logic
     ))
 }
 
+/// Column/row counts that tile `n` accounts as squarely as possible: one account fills the whole
+/// content area, two split it side by side, more stack towards a square, capped at [`MAX_GRID`]
+/// per side because WhatsApp Web is unusable in smaller cells. Accounts beyond `cols * rows` stay
+/// hidden, in dock order.
+fn grid_shape(n: u32) -> (u32, u32) {
+    let cols = ((n as f64).sqrt().ceil() as u32).clamp(1, settings::MAX_GRID);
+    let rows = n.div_ceil(cols).min(settings::MAX_GRID);
+    (cols, rows)
+}
+
 /// Bounds of the `index`-th cell of the multi-account grid, filled row by row below the toolbar.
 fn grid_cell(
     index: usize,
@@ -254,6 +264,9 @@ fn apply_view(app: &AppHandle) {
     };
     // The grid follows the dock order; accounts beyond the last cell stay hidden.
     let grid = grid.then(|| settings::load(app, platform().id));
+    let (cols, rows) = grid
+        .as_ref()
+        .map_or((1, 1), |settings| grid_shape(settings.accounts.len() as u32));
 
     for (id, webview) in account_webviews(app) {
         let bounds = match &grid {
@@ -261,8 +274,8 @@ fn apply_view(app: &AppHandle) {
                 .accounts
                 .iter()
                 .position(|account| account.id == id)
-                .filter(|index| *index < (settings.grid_cols * settings.grid_rows) as usize)
-                .map(|index| grid_cell(index, settings.grid_cols, settings.grid_rows, origin, area)),
+                .filter(|index| *index < (cols * rows) as usize)
+                .map(|index| grid_cell(index, cols, rows, origin, area)),
             None => (active.as_deref() == Some(id.as_str())).then_some((origin, area)),
         };
         match bounds {
@@ -522,7 +535,8 @@ fn switch_account(app: AppHandle, id: Option<String>) -> Result<(), String> {
     Ok(())
 }
 
-/// Switches to the multi-account view: the first `cols x rows` accounts tiled in one screen.
+/// Switches to the multi-account view: every account tiled in one screen, laid out by
+/// [`grid_shape`].
 #[tauri::command]
 fn show_grid(app: AppHandle) {
     if let Ok(mut state) = app.state::<Mutex<SessionState>>().lock() {
@@ -1132,7 +1146,6 @@ mod tests {
         assert!(SESSION_BOOTSTRAP.contains("session://notification"));
     }
 
-    #[test]
     /// The two panes of the default 2x1 view must meet edge to edge: no seam, no overflow.
     #[test]
     fn two_panes_meet_edge_to_edge() {
@@ -1149,6 +1162,23 @@ mod tests {
         assert_eq!(left_pos.y, GRID_BAR_HEIGHT);
         assert_eq!(left.height, area.height - GRID_BAR_HEIGHT);
         assert_eq!(right.height, left.height);
+    }
+
+    /// One account fills the screen, two split it side by side, more stack towards a square, and
+    /// everything past the 4x4 cap stays hidden.
+    #[test]
+    fn grid_shape_fits_the_account_count() {
+        assert_eq!(grid_shape(1), (1, 1));
+        assert_eq!(grid_shape(2), (2, 1));
+        assert_eq!(grid_shape(3), (2, 2));
+        assert_eq!(grid_shape(4), (2, 2));
+        assert_eq!(grid_shape(5), (3, 2));
+        assert_eq!(grid_shape(9), (3, 3));
+        assert_eq!(grid_shape(10), (4, 3));
+        assert_eq!(grid_shape(16), (4, 4));
+        // The cap: cells stop at 16, so 17 accounts means one stays hidden.
+        assert_eq!(grid_shape(17), (4, 4));
+        assert_eq!(grid_shape(25), (4, 4));
     }
 
     /// Whatever the window size, the cells cover the content area exactly once.
