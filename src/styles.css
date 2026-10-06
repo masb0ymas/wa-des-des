@@ -11,6 +11,8 @@
   --radius: 10px;
   /* Must match DOCK_WIDTH in src-tauri/src/lib.rs. */
   --dock: 64px;
+  /* Must match GRID_BAR_HEIGHT in src-tauri/src/lib.rs. */
+  --gridbar: 44px;
   color-scheme: dark;
 }
 
@@ -128,6 +130,48 @@ body {
   color: #04120e;
   font-size: 10px;
   line-height: 16px;
+}
+
+.gridbar {
+  display: none;
+  position: fixed;
+  inset: 0 0 auto var(--dock);
+  height: var(--gridbar);
+  align-items: center;
+  gap: 16px;
+  padding: 0 14px;
+  background: var(--panel);
+  border-bottom: 1px solid var(--line);
+}
+
+.gridbar label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--muted);
+}
+
+.gridbar input {
+  width: 52px;
+  padding: 4px 6px;
+  border-radius: 6px;
+  border: 1px solid var(--line);
+  background: var(--panel-2);
+  color: var(--text);
+  font: inherit;
+}
+
+.gridbar .hint {
+  margin: 0 0 0 auto;
+}
+
+/* Multi-account view: only the toolbar and the grid; empty cells show the page background. */
+body.grid .gridbar {
+  display: flex;
+}
+
+body.grid main {
+  display: none;
 }
 
 main {

@@ -38,6 +38,11 @@ const MAIN_LABEL: &str = "main";
 const OVERLAY_LABEL: &str = "overlay";
 /// Width of the account dock in logical pixels. Must match `--dock` in `src/styles.css`.
 const DOCK_WIDTH: f64 = 64.0;
+/// Height of the toolbar above the grid in the multi-account view. Must match `--gridbar` in
+/// `src/styles.css`.
+const GRID_BAR_HEIGHT: f64 = 44.0;
+/// Gap between grid cells; the UI background shows through it as a divider.
+const GRID_GAP: f64 = 1.0;
 /// Tray icon id.
 const TRAY_ID: &str = "wa-tray";
 
@@ -139,6 +144,8 @@ struct SessionState {
     unread: HashMap<String, u32>,
     /// Id of the account currently shown; `None` while the settings panel is open.
     active: Option<String>,
+    /// Multi-account view: several accounts tiled in a grid instead of the single `active` one.
+    grid: bool,
 }
 
 fn err(error: impl ToString) -> String {
@@ -185,35 +192,99 @@ fn content_bounds(window: &Window) -> tauri::Result<(LogicalPosition<f64>, Logic
     ))
 }
 
-/// Keeps the account webviews glued to the content area. Done by hand rather than with
-/// `auto_resize`, which scales proportionally and would let the fixed-width dock drift.
-fn layout(window: &Window) {
-    let Ok((position, size)) = content_bounds(window) else {
+/// Bounds of the `index`-th cell of the multi-account grid, filled row by row below the toolbar.
+fn grid_cell(
+    index: usize,
+    cols: u32,
+    rows: u32,
+    origin: LogicalPosition<f64>,
+    area: LogicalSize<f64>,
+) -> (LogicalPosition<f64>, LogicalSize<f64>) {
+    let (col, row) = ((index as u32 % cols) as f64, (index as u32 / cols) as f64);
+    let (cols, rows) = (cols as f64, rows as f64);
+    let width = ((area.width - GRID_GAP * (cols - 1.0)) / cols).max(0.0);
+    let height = ((area.height - GRID_BAR_HEIGHT - GRID_GAP * (rows - 1.0)) / rows).max(0.0);
+    (
+        LogicalPosition::new(
+            origin.x + col * (width + GRID_GAP),
+            origin.y + GRID_BAR_HEIGHT + row * (height + GRID_GAP),
+        ),
+        LogicalSize::new(width, height),
+    )
+}
+
+/// Positions, shows and hides every account webview according to the current view: the single
+/// active account filling the content area, the grid, or nothing (settings panel).
+fn apply_view(app: &AppHandle) {
+    let Some(window) = app.get_window(MAIN_LABEL) else {
         return;
     };
-    for webview in window.webviews() {
-        if webview.label().starts_with(ACCOUNT_LABEL_PREFIX) {
-            let _ = webview.set_position(position);
-            let _ = webview.set_size(size);
-        } else if webview.label() == OVERLAY_LABEL {
-            let _ = webview.set_size(LogicalSize::new(size.width + DOCK_WIDTH, size.height));
+    let Ok((origin, area)) = content_bounds(&window) else {
+        return;
+    };
+    let (active, grid) = match app.state::<Mutex<SessionState>>().lock() {
+        Ok(state) => (state.active.clone(), state.grid),
+        Err(_) => return,
+    };
+    // The grid follows the dock order; accounts beyond the last cell stay hidden.
+    let grid = grid.then(|| settings::load(app, platform().id));
+
+    for (id, webview) in account_webviews(app) {
+        let bounds = match &grid {
+            Some(settings) => settings
+                .accounts
+                .iter()
+                .position(|account| account.id == id)
+                .filter(|index| *index < (settings.grid_cols * settings.grid_rows) as usize)
+                .map(|index| grid_cell(index, settings.grid_cols, settings.grid_rows, origin, area)),
+            None => (active.as_deref() == Some(id.as_str())).then_some((origin, area)),
+        };
+        match bounds {
+            Some((position, size)) => {
+                // One atomic call. `set_position` followed by `set_size` each re-read the current
+                // bounds first, and wry's macOS getter assumes an unflipped parent view: inside this
+                // window that read comes back shifted, which slid the grid up over its toolbar.
+                let _ = webview.set_bounds(tauri::Rect {
+                    position: position.into(),
+                    size: size.into(),
+                });
+                let _ = webview.show();
+                if grid.is_none() {
+                    let _ = webview.set_focus();
+                }
+            }
+            None => {
+                let _ = webview.hide();
+            }
         }
     }
 }
 
+/// Keeps the webviews glued to the window. Done by hand rather than with `auto_resize`, which
+/// scales proportionally and would let the fixed-width dock drift.
+fn layout(window: &Window) {
+    if let (Some(overlay), Ok(scale), Ok(size)) = (
+        window.get_webview(OVERLAY_LABEL),
+        window.scale_factor(),
+        window.inner_size(),
+    ) {
+        // Atomic for the same reason as in `apply_view`.
+        let _ = overlay.set_bounds(tauri::Rect {
+            position: LogicalPosition::new(0.0, 0.0).into(),
+            size: size.to_logical::<f64>(scale).into(),
+        });
+    }
+    apply_view(window.app_handle());
+}
+
 /// Shows one account and hides the rest; `None` hides them all to reveal the settings panel.
+/// Either way this leaves the multi-account view.
 fn show_account(app: &AppHandle, id: Option<&str>) {
     if let Ok(mut state) = app.state::<Mutex<SessionState>>().lock() {
         state.active = id.map(str::to_string);
+        state.grid = false;
     }
-    for (account_id, webview) in account_webviews(app) {
-        if Some(account_id.as_str()) == id {
-            let _ = webview.show();
-            let _ = webview.set_focus();
-        } else {
-            let _ = webview.hide();
-        }
-    }
+    apply_view(app);
 }
 
 fn active_account(app: &AppHandle) -> Option<String> {
@@ -271,19 +342,19 @@ async fn set_settings(app: AppHandle, mut settings: Settings) -> Result<Settings
 
     // The UA is baked into a webview at creation time, so it only takes effect on a rebuild.
     if settings.user_agent() != previous.user_agent() {
-        let active = active_account(&app);
         for (_, webview) in account_webviews(&app) {
             let _ = webview.close();
         }
         for account in &settings.accounts {
             build_account_webview(&app, account, &settings).map_err(err)?;
         }
-        show_account(&app, active.as_deref());
     } else {
         for (_, webview) in account_webviews(&app) {
             let _ = webview.set_zoom(settings.zoom);
         }
     }
+    // Re-shows rebuilt webviews and picks up a changed grid size.
+    apply_view(&app);
 
     Ok(settings)
 }
@@ -328,7 +399,7 @@ fn close_add_dialog(app: AppHandle) {
         let _ = webview.close();
     }
     // Hands keyboard focus back to whatever is on screen.
-    show_account(&app, active_account(&app).as_deref());
+    apply_view(&app);
 }
 
 /// Adds an account with a fresh, isolated data store and switches to it. The other accounts'
@@ -377,15 +448,15 @@ fn remove_account(app: AppHandle, id: String) -> Result<Settings, String> {
         let _ = std::fs::remove_dir_all(dir);
     }
 
-    let was_active = {
+    {
         let state = app.state::<Mutex<SessionState>>();
         let mut state = state.lock().map_err(|_| "state is poisoned".to_string())?;
         state.unread.remove(&account.label());
-        state.active.as_deref() == Some(id.as_str())
-    };
-    if was_active {
-        show_account(&app, settings.accounts.first().map(|account| account.id.as_str()));
+        if state.active.as_deref() == Some(id.as_str()) {
+            state.active = settings.accounts.first().map(|account| account.id.clone());
+        }
     }
+    apply_view(&app);
     Ok(settings)
 }
 
@@ -412,6 +483,15 @@ fn switch_account(app: AppHandle, id: Option<String>) -> Result<(), String> {
     }
     show_account(&app, id.as_deref());
     Ok(())
+}
+
+/// Switches to the multi-account view: the first `cols x rows` accounts tiled in one screen.
+#[tauri::command]
+fn show_grid(app: AppHandle) {
+    if let Ok(mut state) = app.state::<Mutex<SessionState>>().lock() {
+        state.grid = true;
+    }
+    apply_view(&app);
 }
 
 /// Opens a single chat in the given account.
@@ -858,8 +938,26 @@ fn watch_notifications(app: &AppHandle) {
     });
 }
 
+/// Fixes the process's bundle identifier before any webview exists (macOS, `tauri dev` only).
+///
+/// WebKit files every data store under `~/Library/WebKit/<bundle identifier>/`. An unbundled dev
+/// binary has no identifier, and the notification plugin installs `com.apple.Terminal` the first
+/// time it shows a notification. Left alone, that flips the identifier mid-run: an account added
+/// after the first notification was stored under a different directory than the one the next launch
+/// looked in, so its login appeared to vanish. Doing the same switch up front makes every run agree.
+/// A bundled app is unaffected: the plugin sets the identifier it already has.
+#[cfg(target_os = "macos")]
+fn pin_dev_identity() {
+    if tauri::is_dev() {
+        let _ = mac_notification_sys::set_application("com.apple.Terminal");
+    }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    #[cfg(target_os = "macos")]
+    pin_dev_identity();
+
     let mut builder = tauri::Builder::default();
 
     // Must be the first plugin: a second launch has to hand over to the running instance and exit,
@@ -892,6 +990,7 @@ pub fn run() {
             remove_account,
             rename_account,
             switch_account,
+            show_grid,
             open_chat,
             reload_session,
             clear_session_data,
@@ -981,6 +1080,27 @@ mod tests {
         assert!(SESSION_BOOTSTRAP.contains("session://unread"));
         assert!(SESSION_BOOTSTRAP.contains("currentWebview"));
         assert!(SESSION_BOOTSTRAP.contains("session://notification"));
+    }
+
+    #[test]
+    fn grid_cells_tile_the_area_below_the_toolbar() {
+        let origin = LogicalPosition::new(DOCK_WIDTH, 0.0);
+        let area = LogicalSize::new(1001.0, GRID_BAR_HEIGHT + 601.0);
+
+        let (position, size) = grid_cell(0, 2, 2, origin, area);
+        assert_eq!((position.x, position.y), (DOCK_WIDTH, GRID_BAR_HEIGHT));
+        assert_eq!((size.width, size.height), (500.0, 300.0));
+
+        // Last cell of a 2x2 grid: second column, second row, ending exactly at the area's edge.
+        let (position, size) = grid_cell(3, 2, 2, origin, area);
+        assert_eq!(position.x + size.width, DOCK_WIDTH + area.width);
+        assert_eq!(position.y + size.height, area.height);
+
+        // A single cell is the whole area minus the toolbar, and tiny windows never go negative.
+        let (_, size) = grid_cell(0, 1, 1, origin, area);
+        assert_eq!((size.width, size.height), (1001.0, 601.0));
+        let (_, size) = grid_cell(0, 4, 4, origin, LogicalSize::new(0.0, 0.0));
+        assert_eq!((size.width, size.height), (0.0, 0.0));
     }
 
     #[test]

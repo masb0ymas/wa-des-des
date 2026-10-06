@@ -32,6 +32,8 @@ interface Settings {
   autostart: boolean;
   zoom: number;
   accounts: Account[];
+  gridCols: number;
+  gridRows: number;
 }
 
 interface UaOption {
@@ -126,6 +128,8 @@ const unread = new Map<string, number>();
 
 /** Account shown in the content area; `null` while the settings panel is open. */
 let active: string | null = null;
+/** Multi-account view: several accounts tiled in a grid instead of the single `active` one. */
+let grid = false;
 /** Last account shown, which is what "Open chat" targets from the settings panel. */
 let selected = "";
 
@@ -154,6 +158,7 @@ function confirmAction(title: string, message: string, action: string): Promise<
 
 async function show(id: string | null): Promise<void> {
   await call("switch_account", { id });
+  grid = false;
   active = id;
   if (id) selected = id;
   renderAccounts();
@@ -172,7 +177,14 @@ function applyAccounts(saved: Settings | undefined): void {
 }
 
 function renderAccounts(): void {
-  el<HTMLButtonElement>("open-settings").setAttribute("aria-current", String(active === null));
+  el<HTMLButtonElement>("open-settings").setAttribute("aria-current", String(!grid && active === null));
+  el<HTMLButtonElement>("open-grid").setAttribute("aria-current", String(grid));
+  document.body.classList.toggle("grid", grid);
+  const cells = settings.gridCols * settings.gridRows;
+  el<HTMLElement>("grid-note").textContent =
+    settings.accounts.length > cells
+      ? `Showing ${cells} of ${settings.accounts.length} accounts, in dock order`
+      : "";
 
   el<HTMLUListElement>("dock-accounts").replaceChildren(
     ...settings.accounts.map((account) => {
@@ -182,7 +194,7 @@ function renderAccounts(): void {
       const initials = (words.length > 1 ? words[0][0] + words[1][0] : words[0].slice(0, 2)).toUpperCase();
       const avatar = button(initials, () => void show(account.id), "dock-btn");
       avatar.title = account.name;
-      avatar.setAttribute("aria-current", String(active === account.id));
+      avatar.setAttribute("aria-current", String(!grid && active === account.id));
       const count = unread.get(`wa-${account.id}`) ?? 0;
       if (count > 0) {
         const badge = document.createElement("span");
@@ -231,6 +243,7 @@ function renderAccounts(): void {
 
       // Both commands bring the account on screen, so their effect is visible.
       const shown = (message: string) => {
+        grid = false;
         active = selected = account.id;
         renderAccounts();
         log("info", message);
@@ -299,6 +312,7 @@ async function subscribeSessionEvents(): Promise<void> {
 
   // Sent by the backend once the dialog overlay has created an account and switched to it.
   await listen<Settings>("accounts://added", (event) => {
+    grid = false;
     active = selected = event.payload.accounts[event.payload.accounts.length - 1].id;
     applyAccounts(event.payload);
     log("info", "account added");
@@ -337,6 +351,24 @@ function bindControls(): void {
 
   el<HTMLButtonElement>("open-settings").addEventListener("click", () => void show(null));
 
+  el<HTMLButtonElement>("open-grid").addEventListener("click", () => {
+    void call("show_grid").then(() => {
+      grid = true;
+      renderAccounts();
+    });
+  });
+
+  for (const [id, key] of [["grid-cols", "gridCols"], ["grid-rows", "gridRows"]] as const) {
+    const input = el<HTMLInputElement>(id);
+    input.value = String(settings[key]);
+    input.addEventListener("change", () => {
+      settings[key] = Math.min(4, Math.max(1, Math.round(Number(input.value)) || 1));
+      input.value = String(settings[key]);
+      // The backend re-tiles the grid as part of saving.
+      void persist().then(renderAccounts);
+    });
+  }
+
   el<HTMLButtonElement>("add-account").addEventListener("click", () => void call("open_add_dialog"));
 
   el<HTMLFormElement>("open-chat-form").addEventListener("submit", (event) => {
@@ -344,6 +376,7 @@ function bindControls(): void {
     const jid = el<HTMLInputElement>("chat-number").value.trim();
     if (!jid || !selected) return;
     void call("open_chat", { id: selected, jid }).then(() => {
+      grid = false;
       active = selected;
       renderAccounts();
     });
@@ -395,6 +428,8 @@ async function main(): Promise<void> {
     autostart: false,
     zoom: 1,
     accounts: [{ id: "default", name: "Account 1" }],
+    gridCols: 2,
+    gridRows: 1,
   };
 
   // The backend shows the first account on startup.

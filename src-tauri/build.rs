@@ -12,6 +12,7 @@ fn main() {
                 "remove_account",
                 "rename_account",
                 "switch_account",
+                "show_grid",
                 "open_chat",
                 "reload_session",
                 "clear_session_data",

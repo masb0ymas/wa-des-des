@@ -16,6 +16,7 @@
     "allow-remove-account",
     "allow-rename-account",
     "allow-switch-account",
+    "allow-show-grid",
     "allow-open-chat",
     "allow-reload-session",
     "allow-clear-session-data",

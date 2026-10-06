@@ -70,6 +70,22 @@ pub struct Settings {
     /// Linked accounts, in dock order. Defaulted so a pre-multi-account file still parses.
     #[serde(default)]
     pub accounts: Vec<Account>,
+    /// Columns and rows of the multi-account view. Defaulted like `accounts`.
+    #[serde(default = "default_grid_cols")]
+    pub grid_cols: u32,
+    #[serde(default = "default_grid_rows")]
+    pub grid_rows: u32,
+}
+
+/// Largest grid side offered; WhatsApp Web is unusable in cells smaller than that.
+pub const MAX_GRID: u32 = 4;
+
+fn default_grid_cols() -> u32 {
+    2
+}
+
+fn default_grid_rows() -> u32 {
+    1
 }
 
 impl Settings {
@@ -85,6 +101,8 @@ impl Settings {
                 id: DEFAULT_ACCOUNT_ID.to_string(),
                 name: "Account 1".to_string(),
             }],
+            grid_cols: default_grid_cols(),
+            grid_rows: default_grid_rows(),
         }
     }
 
@@ -99,6 +117,8 @@ impl Settings {
         }
         self.zoom = self.zoom.clamp(0.5, 2.0);
         self.custom_user_agent = self.custom_user_agent.trim().to_string();
+        self.grid_cols = self.grid_cols.clamp(1, MAX_GRID);
+        self.grid_rows = self.grid_rows.clamp(1, MAX_GRID);
 
         // Ids become webview labels and directory names, so anything unexpected is dropped.
         let mut seen = std::collections::HashSet::new();
@@ -212,6 +232,9 @@ mod tests {
         assert_eq!(settings.accounts.len(), 1);
         assert_eq!(settings.accounts[0].id, DEFAULT_ACCOUNT_ID);
         assert_eq!(settings.accounts[0].store_id(), None);
+        assert_eq!((settings.grid_cols, settings.grid_rows), (2, 1));
+        settings.grid_cols = 0;
+        settings.grid_rows = 99;
 
         let added = Account::new("  Work  ".into());
         assert!(added.store_id().is_some());
@@ -223,6 +246,7 @@ mod tests {
         });
         let settings = settings.normalize("linux");
         assert_eq!(settings.accounts.len(), 2, "duplicate and unsafe ids are dropped");
+        assert_eq!((settings.grid_cols, settings.grid_rows), (1, MAX_GRID));
         assert_eq!(settings.accounts[1].name, "Work");
         assert_eq!(settings.accounts[1].label(), format!("wa-{}", added.id));
     }
