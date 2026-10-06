@@ -17,7 +17,14 @@
     </nav>
 
     <main>
-      <section class="card wide">
+      <!-- Radio buttons drive the tabs through :has() in styles.css; no script involved. -->
+      <fieldset class="tabs">
+        <legend>Settings</legend>
+        <label><input type="radio" name="settings-tab" id="tab-general" checked /><span>General</span></label>
+        <label><input type="radio" name="settings-tab" id="tab-developer" /><span>Developer</span></label>
+      </fieldset>
+
+      <section class="card wide" data-tab="general">
         <h2>Accounts</h2>
         <p class="hint">Each account has its own isolated login. Adding or removing one does not affect the others.</p>
         <ul class="chats" id="accounts"></ul>
@@ -25,10 +32,25 @@
           <input id="chat-number" type="text" inputmode="numeric" placeholder="Phone number, digits with country code" aria-label="Phone number" />
           <button type="submit">Open chat</button>
         </form>
-        <p class="hint" id="session-path"></p>
       </section>
 
-      <section class="card">
+      <section class="card wide" data-tab="general">
+        <h2>Behaviour</h2>
+        <label class="check">
+          <input id="set-notifications" type="checkbox" />
+          <span>Native notifications for unread messages</span>
+        </label>
+        <label class="check">
+          <input id="set-badge" type="checkbox" />
+          <span>Show unread count on the app badge</span>
+        </label>
+        <label class="check">
+          <input id="set-autostart" type="checkbox" />
+          <span>Start on login</span>
+        </label>
+      </section>
+
+      <section class="card" data-tab="developer">
         <h2>User agent</h2>
         <p class="hint" id="ua-hint"></p>
         <label class="field">
@@ -44,31 +66,16 @@
         <p class="hint" id="ua-snapshot"></p>
       </section>
 
-      <section class="card">
-        <h2>Behaviour</h2>
-        <label class="check">
-          <input id="set-notifications" type="checkbox" />
-          <span>Native notifications for unread messages</span>
-        </label>
-        <label class="check">
-          <input id="set-badge" type="checkbox" />
-          <span>Show unread count on the app badge</span>
-        </label>
-        <label class="check">
-          <input id="set-autostart" type="checkbox" />
-          <span>Start on login</span>
-        </label>
+      <section class="card" data-tab="developer">
+        <h2>Runtime</h2>
+        <dl class="kv" id="runtime-info"></dl>
+        <p class="hint" id="session-path"></p>
         <div class="actions">
           <button id="test-notification">Test notification</button>
         </div>
       </section>
 
-      <section class="card">
-        <h2>Runtime</h2>
-        <dl class="kv" id="runtime-info"></dl>
-      </section>
-
-      <section class="card">
+      <section class="card wide" data-tab="developer">
         <h2>Activity</h2>
         <ol class="log" id="log"></ol>
       </section>

@@ -13,3 +13,4 @@ src-tauri/target/
 .claude/
 .zcode/
 skills-lock.json
+.omc/

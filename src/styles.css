@@ -150,6 +150,59 @@ main {
   grid-column: 1 / -1;
 }
 
+/* Settings tabs: a segmented control made of radio buttons. */
+.tabs {
+  grid-column: 1 / -1;
+  justify-self: start;
+  display: flex;
+  gap: 2px;
+  margin: 0;
+  padding: 3px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--panel);
+}
+
+.tabs legend,
+.tabs input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+}
+
+.tabs span {
+  display: block;
+  padding: 6px 16px;
+  border-radius: 7px;
+  color: var(--muted);
+  cursor: pointer;
+  transition:
+    background-color 0.15s ease,
+    color 0.15s ease;
+}
+
+.tabs span:hover {
+  color: var(--text);
+}
+
+.tabs input:checked + span {
+  background: var(--accent-dim);
+  color: var(--text);
+  font-weight: 600;
+}
+
+.tabs input:focus-visible + span {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+main:has(#tab-general:checked) [data-tab="developer"],
+main:has(#tab-developer:checked) [data-tab="general"] {
+  display: none;
+}
+
 .card h2 {
   margin: 0 0 10px;
   font-size: 12px;
