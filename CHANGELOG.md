@@ -3,6 +3,12 @@
 All notable changes to WaDesk will be documented in this file.
 
 
+## [0.1.2](https://github.com/masb0ymas/wa-des-des/compare/v0.1.1...v0.1.2) (2026-10-06)
+
+### Bug Fixes
+
+* **macos:** ad-hoc sign app bundle ([a138e83](https://github.com/masb0ymas/wa-des-des/commit/a138e83f8dc3f389793370ef365f664410b48a9d))
+
 ## 0.1.1 (2026-10-06)
 
 ### Features
