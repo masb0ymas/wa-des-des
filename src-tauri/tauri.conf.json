@@ -23,6 +23,7 @@
         "resizable": true,
         "center": true,
         "visible": true,
+        "titleBarStyle": "Transparent",
         "zoomHotkeysEnabled": true
       }
     ],
