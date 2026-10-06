@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <!--
+    Merged on top of the plist Tauri generates (see the bundler's macOS `app.rs`, which inserts
+    every key from `bundle.macOS.infoPlist` last). Keys below override or extend that set.
+  -->
+  <key>LSApplicationCategoryType</key>
+  <string>public.app-category.social-networking</string>
+
+  <!--
+    `localhost` is the origin Tauri's custom protocol uses on macOS/Windows when serving the
+    bundled frontend, so it must stay reachable for the launcher window.
+  -->
+  <key>NSAppTransportSecurity</key>
+  <dict>
+    <key>NSAllowsLocalNetworking</key>
+    <true/>
+  </dict>
+
+  <!--
+    WhatsApp Web asks for these from the WKWebView. The usage strings are mandatory: without them
+    macOS terminates the process as soon as the webview requests access, which is what makes voice
+    notes, calls and the QR-code scanner crash instead of degrading gracefully.
+  -->
+  <key>NSMicrophoneUsageDescription</key>
+  <string>WA Des Des uses the microphone for WhatsApp voice messages and calls.</string>
+  <key>NSCameraUsageDescription</key>
+  <string>WA Des Des uses the camera for WhatsApp video calls and QR-code scanning.</string>
+
+  <!-- Media keys / Now Playing integration for voice messages. -->
+  <key>NSAppleMusicUsageDescription</key>
+  <string>WA Des Des plays WhatsApp voice messages and notification sounds.</string>
+
+  <key>NSHumanReadableCopyright</key>
+  <string>Copyright (c) 2026 wa-des-des contributors</string>
+</dict>
+</plist>

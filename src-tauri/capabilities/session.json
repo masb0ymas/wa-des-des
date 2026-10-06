@@ -1,0 +1,11 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "identifier": "session",
+  "description": "Permissions for the account webviews that load WhatsApp Web from the remote origin. Deliberately minimal: WhatsApp Web code runs in these webviews, so the only capability granted is the one the injected bootstrap script needs.",
+  "local": false,
+  "remote": {
+    "urls": ["https://web.whatsapp.com/*", "https://*.whatsapp.com/*", "https://*.whatsapp.net/*"]
+  },
+  "webviews": ["wa-*"],
+  "permissions": ["core:event:allow-emit"]
+}

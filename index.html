@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>WA Des Des</title>
+    <link rel="stylesheet" href="/src/styles.css" />
+  </head>
+  <body>
+    <!-- The account webviews are native views laid over everything right of the dock; the settings
+         panel below is what shows through when they are hidden. -->
+    <nav class="dock" aria-label="Accounts">
+      <ul id="dock-accounts"></ul>
+      <button id="add-account" class="dock-btn icon add" title="Add account" aria-label="Add account"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></button>
+      <span class="spacer"></span>
+      <button id="open-settings" class="dock-btn icon" title="Settings" aria-label="Settings"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33h0a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51h0a1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82v0a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></button>
+    </nav>
+
+    <main>
+      <section class="card wide">
+        <h2>Accounts</h2>
+        <p class="hint">Each account has its own isolated login. Adding or removing one does not affect the others.</p>
+        <ul class="chats" id="accounts"></ul>
+        <form class="actions" id="open-chat-form">
+          <input id="chat-number" type="text" inputmode="numeric" placeholder="Phone number, digits with country code" aria-label="Phone number" />
+          <button type="submit">Open chat</button>
+        </form>
+        <p class="hint" id="session-path"></p>
+      </section>
+
+      <section class="card">
+        <h2>User agent</h2>
+        <p class="hint" id="ua-hint"></p>
+        <label class="field">
+          <span>Preset</span>
+          <select id="ua-preset"></select>
+        </label>
+        <label class="field" id="ua-custom-field" hidden>
+          <span>Custom UA</span>
+          <input id="ua-custom" type="text" spellcheck="false" autocomplete="off" />
+        </label>
+        <p class="effective">Effective: <code id="ua-effective"></code></p>
+        <p class="effective">Reported by the webview: <code id="ua-actual">(waiting for the page…)</code></p>
+        <p class="hint" id="ua-snapshot"></p>
+      </section>
+
+      <section class="card">
+        <h2>Behaviour</h2>
+        <label class="check">
+          <input id="set-notifications" type="checkbox" />
+          <span>Native notifications for unread messages</span>
+        </label>
+        <label class="check">
+          <input id="set-badge" type="checkbox" />
+          <span>Show unread count on the app badge</span>
+        </label>
+        <label class="check">
+          <input id="set-autostart" type="checkbox" />
+          <span>Start on login</span>
+        </label>
+        <div class="actions">
+          <button id="test-notification">Test notification</button>
+        </div>
+      </section>
+
+      <section class="card">
+        <h2>Runtime</h2>
+        <dl class="kv" id="runtime-info"></dl>
+      </section>
+
+      <section class="card">
+        <h2>Activity</h2>
+        <ol class="log" id="log"></ol>
+      </section>
+    </main>
+
+    <!-- Only ever opened in the transparent `overlay` webview, which loads this page as
+         index.html#add-account-dialog; the :target rules in styles.css strip everything else. -->
+    <dialog id="add-account-dialog">
+      <form method="dialog">
+        <h2>Add account</h2>
+        <input id="add-account-name" type="text" maxlength="32" placeholder="e.g. Personal, Work" aria-label="Account name" autocomplete="off" />
+        <p class="hint">Up to 32 characters. Shown only on this device.</p>
+        <div class="dialog-actions">
+          <button value="cancel" class="ghost">Cancel</button>
+          <button value="add" class="primary">Add</button>
+        </div>
+      </form>
+    </dialog>
+
+    <!-- window.confirm() is not implemented by WKWebView under Tauri (it returns false without
+         showing anything), so destructive actions ask through this dialog instead. -->
+    <dialog id="confirm-dialog">
+      <form method="dialog">
+        <h2 id="confirm-title"></h2>
+        <p class="hint" id="confirm-message"></p>
+        <div class="dialog-actions">
+          <button value="cancel" class="ghost">Cancel</button>
+          <button value="ok" class="danger" id="confirm-ok"></button>
+        </div>
+      </form>
+    </dialog>
+
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

@@ -1,0 +1,24 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "identifier": "launcher",
+  "description": "Permissions for the bundled UI webviews (dock + settings, and the transparent dialog overlay that loads the same bundle). It owns settings, accounts and app lifecycle; it never executes WhatsApp Web code. Scoped by webview, not window: the account webviews share the same window.",
+  "local": true,
+  "webviews": ["main", "overlay"],
+  "permissions": [
+    "core:default",
+    "allow-runtime-info",
+    "allow-get-settings",
+    "allow-set-settings",
+    "allow-ua-options",
+    "allow-open-add-dialog",
+    "allow-close-add-dialog",
+    "allow-add-account",
+    "allow-remove-account",
+    "allow-rename-account",
+    "allow-switch-account",
+    "allow-open-chat",
+    "allow-reload-session",
+    "allow-clear-session-data",
+    "allow-test-notification"
+  ]
+}

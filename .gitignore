@@ -1,0 +1,15 @@
+*.log
+.DS_Store
+dist/
+node_modules/
+src-tauri/gen/
+src-tauri/target/
+
+# graft's local graph cache — regenerable, not committed (run `graft build`).
+/graft/
+
+# Local agent tooling (skills), not part of the app.
+.agents/
+.claude/
+.zcode/
+skills-lock.json
