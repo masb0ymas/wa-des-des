@@ -3,6 +3,13 @@
 All notable changes to WaDesk will be documented in this file.
 
 
+## [0.1.4](https://github.com/masb0ymas/wa-des-des/compare/v0.1.3...v0.1.4) (2026-10-07)
+
+### Bug Fixes
+
+* **grid:** settle WhatsApp's layout when leaving the multi-account grid ([8fdf619](https://github.com/masb0ymas/wa-des-des/commit/8fdf61981d9e382144f7e1fa9c3dcb07709eae20))
+* **macos:** deliver notifications through UNUserNotificationCenter ([29dab21](https://github.com/masb0ymas/wa-des-des/commit/29dab21b5f3d988f58d0070515f7f4cacbda4689))
+
 ## [0.1.3](https://github.com/masb0ymas/wa-des-des/compare/v0.1.2...v0.1.3) (2026-10-07)
 
 ### Bug Fixes
