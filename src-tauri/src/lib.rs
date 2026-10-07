@@ -180,6 +180,9 @@ struct SessionState {
     active: Option<String>,
     /// Multi-account view: several accounts tiled in a grid instead of the single `active` one.
     grid: bool,
+    /// Last zoom applied per webview label. `setPageZoom` reflows the page even for a same-value
+    /// call, so `apply_view` must only reach the engine when the value actually changes.
+    zooms: HashMap<String, f64>,
 }
 
 fn err(error: impl ToString) -> String {
@@ -280,10 +283,11 @@ fn apply_view(app: &AppHandle) {
     let Ok((origin, area)) = content_bounds(&window) else {
         return;
     };
-    let (active, grid) = match app.state::<Mutex<SessionState>>().lock() {
-        Ok(state) => (state.active.clone(), state.grid),
-        Err(_) => return,
+    let session = app.state::<Mutex<SessionState>>();
+    let Ok(mut state) = session.lock() else {
+        return;
     };
+    let (active, grid) = (state.active.clone(), state.grid);
     // The zoom of the single view and the grid's account order both come from the settings file;
     // a resize re-runs this, so the fit-to-pane zoom tracks the window size.
     let settings = settings::load(app, platform().id);
@@ -313,7 +317,6 @@ fn apply_view(app: &AppHandle) {
                     position: position.into(),
                     size: size.into(),
                 });
-                let _ = webview.show();
                 // A pane narrower than the desktop layout zooms out just enough to keep that
                 // layout, instead of the page's cramped phone fallback. The configured zoom stays
                 // a single-view concern: scaled-to-fit panes already trade legibility for coverage.
@@ -322,7 +325,16 @@ fn apply_view(app: &AppHandle) {
                 } else {
                     settings.zoom
                 };
-                let _ = webview.set_zoom(zoom);
+                // Zoom before the first paint at the new frame, so a pane coming out of the grid
+                // never shows the old scale stretched over the new size. The frame and the scale
+                // reach the page as separate commits; the resize nudge makes WhatsApp re-measure,
+                // so its media queries cannot lag one transition behind.
+                if state.zooms.get(id.as_str()) != Some(&zoom) {
+                    let _ = webview.set_zoom(zoom);
+                    let _ = webview.eval("window.dispatchEvent(new Event('resize'))");
+                    state.zooms.insert(id.clone(), zoom);
+                }
+                let _ = webview.show();
                 if !grid {
                     let _ = webview.set_focus();
                 }
