@@ -144,10 +144,20 @@ function renderUserAgent(): void {
 /** Unread counters reported by the account webviews, keyed by webview label (`wa-<id>`). */
 const unread = new Map<string, number>();
 
-/** Mirrors `grid_shape` in src-tauri/src/lib.rs: near-square tiling capped at 4 per side. */
-function gridCells(count: number): number {
-  const cols = Math.min(4, Math.max(1, Math.ceil(Math.sqrt(count))));
-  const rows = Math.min(4, Math.ceil(count / cols));
+/* Chrome measures mirrored from src-tauri/src/lib.rs: the dock reserves the left edge, the grid
+   bar sits above the grid, and grid cells may not shrink past the smallest usable pane. */
+const DOCK_WIDTH = 64;
+const GRID_BAR_HEIGHT = 44;
+const GRID_MIN_CELL = { width: 360, height: 240 };
+
+/** Mirrors `grid_shape` in src-tauri/src/lib.rs: near-square tiling capped at 4 per side, and
+   capped by the window size so no cell drops below the smallest usable pane — a small window
+   shows fewer accounts, which is what the grid note then explains. */
+function gridCells(count: number, width = window.innerWidth, height = window.innerHeight): number {
+  const colCap = Math.max(1, Math.floor((width - DOCK_WIDTH) / GRID_MIN_CELL.width));
+  const rowCap = Math.max(1, Math.floor((height - GRID_BAR_HEIGHT) / GRID_MIN_CELL.height));
+  const cols = Math.min(4, Math.max(1, Math.ceil(Math.sqrt(count))), colCap);
+  const rows = Math.min(4, Math.ceil(count / cols), rowCap);
   return cols * rows;
 }
 
@@ -486,6 +496,11 @@ function bindControls(): void {
       const cells = gridCells(settings.accounts.length);
       announce(`Multi-account view, showing ${Math.min(cells, settings.accounts.length)} of ${settings.accounts.length} accounts`);
     });
+  });
+
+  // The backend re-tiles the grid natively while the window resizes; keep the note in step.
+  window.addEventListener("resize", () => {
+    if (grid) renderAccounts();
   });
 
   el<HTMLButtonElement>("add-account").addEventListener("click", () => void call("open_add_dialog"));

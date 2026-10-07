@@ -48,6 +48,17 @@ const GRID_BAR_HEIGHT: f64 = 44.0;
 /// near-black and WhatsApp Web is white, so even a 1px gap paints a dark seam between two panes,
 /// which reads as a divider the user did not ask for.
 const GRID_GAP: f64 = 0.0;
+/// Smallest grid cell worth showing, in logical pixels. Below this WhatsApp Web crowds its chrome
+/// and list rows into an unusable smear, so the grid shows fewer accounts instead. Must match
+/// `GRID_MIN_CELL` in `src/main.ts`.
+const GRID_MIN_CELL_WIDTH: f64 = 360.0;
+const GRID_MIN_CELL_HEIGHT: f64 = 240.0;
+/// Viewport width from which WhatsApp Web lays out its three-pane desktop UI; below it the page
+/// falls back to the one-panel-at-a-time phone layout. Grid panes narrower than this zoom out just
+/// enough to reach it. Must match `GRID_REF_WIDTH` in `src/main.ts`.
+const GRID_REF_WIDTH: f64 = 768.0;
+/// Floor for the fit-to-pane zoom: past half size the scaled page stops being legible at all.
+const GRID_MIN_ZOOM: f64 = 0.5;
 /// Tray icon id.
 const TRAY_ID: &str = "wa-tray";
 
@@ -210,12 +221,16 @@ fn content_bounds(window: &Window) -> tauri::Result<(LogicalPosition<f64>, Logic
 }
 
 /// Column/row counts that tile `n` accounts as squarely as possible: one account fills the whole
-/// content area, two split it side by side, more stack towards a square, capped at [`MAX_GRID`]
-/// per side because WhatsApp Web is unusable in smaller cells. Accounts beyond `cols * rows` stay
-/// hidden, in dock order.
-fn grid_shape(n: u32) -> (u32, u32) {
-    let cols = ((n as f64).sqrt().ceil() as u32).clamp(1, settings::MAX_GRID);
-    let rows = n.div_ceil(cols).min(settings::MAX_GRID);
+/// content area, two split it side by side, more stack towards a square. Capped at [`MAX_GRID`]
+/// per side, and capped again by the window area so no cell drops below [`GRID_MIN_CELL_WIDTH`] x
+/// [`GRID_MIN_CELL_HEIGHT`] — a small window therefore shows fewer accounts rather than unusably
+/// cramped ones. Accounts beyond `cols * rows` stay hidden, in dock order.
+fn grid_shape(n: u32, area: LogicalSize<f64>) -> (u32, u32) {
+    let col_cap = ((area.width / GRID_MIN_CELL_WIDTH) as u32).clamp(1, settings::MAX_GRID);
+    let row_cap =
+        (((area.height - GRID_BAR_HEIGHT) / GRID_MIN_CELL_HEIGHT) as u32).clamp(1, settings::MAX_GRID);
+    let cols = ((n as f64).sqrt().ceil() as u32).clamp(1, settings::MAX_GRID).min(col_cap);
+    let rows = n.div_ceil(cols).clamp(1, settings::MAX_GRID).min(row_cap);
     (cols, rows)
 }
 
@@ -263,21 +278,25 @@ fn apply_view(app: &AppHandle) {
         Ok(state) => (state.active.clone(), state.grid),
         Err(_) => return,
     };
-    // The grid follows the dock order; accounts beyond the last cell stay hidden.
-    let grid = grid.then(|| settings::load(app, platform().id));
-    let (cols, rows) = grid
-        .as_ref()
-        .map_or((1, 1), |settings| grid_shape(settings.accounts.len() as u32));
+    // The zoom of the single view and the grid's account order both come from the settings file;
+    // a resize re-runs this, so the fit-to-pane zoom tracks the window size.
+    let settings = settings::load(app, platform().id);
+    let (cols, rows) = if grid {
+        grid_shape(settings.accounts.len() as u32, area)
+    } else {
+        (1, 1)
+    };
 
     for (id, webview) in account_webviews(app) {
-        let bounds = match &grid {
-            Some(settings) => settings
+        let bounds = if grid {
+            settings
                 .accounts
                 .iter()
                 .position(|account| account.id == id)
                 .filter(|index| *index < (cols * rows) as usize)
-                .map(|index| grid_cell(index, cols, rows, origin, area)),
-            None => (active.as_deref() == Some(id.as_str())).then_some((origin, area)),
+                .map(|index| grid_cell(index, cols, rows, origin, area))
+        } else {
+            (active.as_deref() == Some(id.as_str())).then_some((origin, area))
         };
         match bounds {
             Some((position, size)) => {
@@ -289,7 +308,16 @@ fn apply_view(app: &AppHandle) {
                     size: size.into(),
                 });
                 let _ = webview.show();
-                if grid.is_none() {
+                // A pane narrower than the desktop layout zooms out just enough to keep that
+                // layout, instead of the page's cramped phone fallback. The configured zoom stays
+                // a single-view concern: scaled-to-fit panes already trade legibility for coverage.
+                let zoom = if grid {
+                    (size.width / GRID_REF_WIDTH).clamp(GRID_MIN_ZOOM, 1.0)
+                } else {
+                    settings.zoom
+                };
+                let _ = webview.set_zoom(zoom);
+                if !grid {
                     let _ = webview.set_focus();
                 }
             }
@@ -1225,17 +1253,36 @@ mod tests {
     /// everything past the 4x4 cap stays hidden.
     #[test]
     fn grid_shape_fits_the_account_count() {
-        assert_eq!(grid_shape(1), (1, 1));
-        assert_eq!(grid_shape(2), (2, 1));
-        assert_eq!(grid_shape(3), (2, 2));
-        assert_eq!(grid_shape(4), (2, 2));
-        assert_eq!(grid_shape(5), (3, 2));
-        assert_eq!(grid_shape(9), (3, 3));
-        assert_eq!(grid_shape(10), (4, 3));
-        assert_eq!(grid_shape(16), (4, 4));
+        // Far larger than any cell minimum, so the shape depends on the count alone.
+        let big = LogicalSize::new(4000.0, 3000.0);
+        assert_eq!(grid_shape(1, big), (1, 1));
+        assert_eq!(grid_shape(2, big), (2, 1));
+        assert_eq!(grid_shape(3, big), (2, 2));
+        assert_eq!(grid_shape(4, big), (2, 2));
+        assert_eq!(grid_shape(5, big), (3, 2));
+        assert_eq!(grid_shape(9, big), (3, 3));
+        assert_eq!(grid_shape(10, big), (4, 3));
+        assert_eq!(grid_shape(16, big), (4, 4));
         // The cap: cells stop at 16, so 17 accounts means one stays hidden.
-        assert_eq!(grid_shape(17), (4, 4));
-        assert_eq!(grid_shape(25), (4, 4));
+        assert_eq!(grid_shape(17, big), (4, 4));
+        assert_eq!(grid_shape(25, big), (4, 4));
+    }
+
+    /// A small window shows fewer accounts rather than squeezing panes below the usable size.
+    #[test]
+    fn grid_shape_follows_the_window_size() {
+        // 1216 logical px of content fits two 360px columns: the default two accounts sit side
+        // by side, as on any reasonably sized screen.
+        assert_eq!(grid_shape(2, LogicalSize::new(1216.0, 800.0)), (2, 1));
+        // Narrower than two minimum cells: one column. Both accounts still show, stacked, because
+        // the height allows two rows.
+        assert_eq!(grid_shape(2, LogicalSize::new(700.0, 800.0)), (1, 2));
+        // Too small all round: a single cell is all that fits, the rest stay hidden.
+        assert_eq!(grid_shape(4, LogicalSize::new(500.0, 400.0)), (1, 1));
+        // A short window caps rows before the account count does: 6 of 9 are visible.
+        assert_eq!(grid_shape(9, LogicalSize::new(4000.0, 700.0)), (3, 2));
+        // Degenerate areas still produce a workable 1x1 shape.
+        assert_eq!(grid_shape(4, LogicalSize::new(0.0, 0.0)), (1, 1));
     }
 
     /// Whatever the window size, the cells cover the content area exactly once.
