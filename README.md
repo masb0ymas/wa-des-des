@@ -221,7 +221,11 @@ with nothing to resolve.
   request with `Grant` and does not surface it to the app, so camera/microphone access cannot be
   made per-origin conditional from here.
 - **Notifications are opt-in per site.** `bundle.identifier` is the notification identity; on Linux
-  and Windows the app must be installed for the notification centre to accept it.
+  and Windows the app must be installed for the notification centre to accept it. On macOS the app
+  asks `UNUserNotificationCenter` directly (the Tauri plugin still speaks the deprecated
+  `NSUserNotification` API there, which the system suppresses while the app is frontmost), so the
+  first notification raises the standard authorization prompt and banners show even while WaDesk
+  is the active app.
 - **The unread badge is macOS-only.** `set_badge_count` is a no-op on Windows and unsupported on
   Linux; the settings panel reports the engine's capability set rather than pretending otherwise.
 - **Downloads** are handled by the engine's default behaviour (WebView2 download UI, WKWebView

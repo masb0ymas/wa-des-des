@@ -27,11 +27,16 @@ use tauri::{
     AppHandle, Emitter, Listener, LogicalPosition, LogicalSize, Manager, Url, Webview, WebviewUrl, Window,
 };
 use tauri_plugin_autostart::ManagerExt as _;
+// macOS delivers notifications through `notify` instead, so the plugin extension is only
+// needed on the other platforms.
+#[cfg(not(target_os = "macos"))]
 use tauri_plugin_notification::NotificationExt as _;
 use tauri_plugin_updater::UpdaterExt;
 use tauri_plugin_window_state::StateFlags;
 
 mod settings;
+#[cfg(target_os = "macos")]
+mod notify;
 mod telemetry;
 use settings::{Account, Settings, ACCOUNT_LABEL_PREFIX, DEFAULT_ACCOUNT_ID};
 
@@ -130,8 +135,9 @@ struct Supports {
 fn supports() -> Supports {
     Supports {
         tray: true,
-        // The notification plugin delegates to the platform's native notification centre, which
-        // needs the app to be installed/registered to work reliably.
+        // macOS delivers through the UNUserNotificationCenter wrapper in `notify`; elsewhere the
+        // notification plugin delegates to the platform's notification centre, which needs the app
+        // to be installed/registered to work reliably.
         native_notifications: cfg!(any(
             target_os = "macos",
             target_os = "windows",
@@ -624,6 +630,24 @@ async fn clear_session_data(app: AppHandle, id: String) -> Result<(), String> {
     Ok(())
 }
 
+/// Shows a native notification. macOS bypasses the notification plugin: its chain delivers
+/// through the deprecated `NSUserNotification` API, which the system suppresses while the app is
+/// frontmost — see [`notify`]. Other platforms keep the plugin.
+#[cfg(target_os = "macos")]
+fn show_notification(app: &AppHandle, title: &str, body: &str) -> Result<(), String> {
+    notify::show(app, title, body)
+}
+
+#[cfg(not(target_os = "macos"))]
+fn show_notification(app: &AppHandle, title: &str, body: &str) -> Result<(), String> {
+    app.notification()
+        .builder()
+        .title(title)
+        .body(body)
+        .show()
+        .map_err(err)
+}
+
 #[tauri::command]
 fn test_notification(app: AppHandle) -> Result<(), String> {
     let settings = settings::load(&app, platform().id);
@@ -631,12 +655,7 @@ fn test_notification(app: AppHandle) -> Result<(), String> {
         return Err("native notifications are disabled in the settings".into());
     }
 
-    app.notification()
-        .builder()
-        .title("WaDesk")
-        .body("Native notifications are wired up.")
-        .show()
-        .map_err(err)
+    show_notification(&app, "WaDesk", "Native notifications are wired up.")
 }
 
 /// The installed version and, when the update endpoint offers a newer release, that release.
@@ -1062,12 +1081,7 @@ fn watch_notifications(app: &AppHandle) {
             }
         }
 
-        let _ = handle
-            .notification()
-            .builder()
-            .title(title)
-            .body(text("body", 300))
-            .show();
+        let _ = show_notification(&handle, &title, &text("body", 300));
     });
 }
 

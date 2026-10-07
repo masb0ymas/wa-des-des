@@ -370,6 +370,11 @@ async function subscribeSessionEvents(): Promise<void> {
         : `Downloading update… ${(received / 1048576).toFixed(1)} MB`;
   });
 
+  // Pushed once per run when the system reports notifications are disabled for the app.
+  await listen<string>("notifications://denied", (event) => {
+    log("error", event.payload);
+  });
+
   await listen("session://unsupported", () => {
     log("error", "WhatsApp Web reports an unsupported browser — change the User-Agent preset");
   });
