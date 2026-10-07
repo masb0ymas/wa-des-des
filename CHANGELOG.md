@@ -3,6 +3,12 @@
 All notable changes to WaDesk will be documented in this file.
 
 
+## [0.1.3](https://github.com/masb0ymas/wa-des-des/compare/v0.1.2...v0.1.3) (2026-10-07)
+
+### Bug Fixes
+
+* **grid:** keep multi-account panes usable on small screens ([cc182f4](https://github.com/masb0ymas/wa-des-des/commit/cc182f433f5cbe32febf342da044d8bf6718bf0b))
+
 ## [0.1.2](https://github.com/masb0ymas/wa-des-des/compare/v0.1.1...v0.1.2) (2026-10-06)
 
 ### Bug Fixes
