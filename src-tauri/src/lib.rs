@@ -754,7 +754,15 @@ fn build_account_webview(
     let mut builder = WebviewBuilder::new(&label, WebviewUrl::External(parse_url(WHATSAPP_URL)))
         .zoom_hotkeys_enabled(true)
         .enable_clipboard_access()
-        .initialization_script(SESSION_BOOTSTRAP);
+        .initialization_script(SESSION_BOOTSTRAP)
+        // Links in messages are `target="_blank"`; an embedded webview has no tab to open them in,
+        // so hand them to the system browser. The URL comes from a remote page: web schemes only.
+        .on_new_window(|url, _features| {
+            if matches!(url.scheme(), "http" | "https" | "mailto") {
+                let _ = tauri_plugin_opener::open_url(url.as_str(), None::<&str>);
+            }
+            tauri::webview::NewWindowResponse::Deny
+        });
 
     // The UA has to be installed before the first navigation; there is no runtime setter.
     if let Some(user_agent) = settings.user_agent() {
@@ -920,10 +928,12 @@ const SESSION_BOOTSTRAP: &str = r#"
   const schedule = (task) => () => {
     if (pending) return;
     pending = true;
-    requestAnimationFrame(() => {
+    // A timer, not requestAnimationFrame: background accounts are hidden webviews, and a hidden
+    // page gets no animation frames, so its unread count would never be reported.
+    setTimeout(() => {
       pending = false;
       task();
-    });
+    }, 100);
   };
 
   const observer = new MutationObserver(
