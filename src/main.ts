@@ -27,9 +27,36 @@ interface RuntimeInfo {
   supports: Supports;
 }
 
+/** Mirrors `Service` in src-tauri/src/settings.rs. */
+const SERVICES = { whatsapp: "WhatsApp", telegram: "Telegram", slack: "Slack" } as const;
+type Service = keyof typeof SERVICES;
+
+/** Brand marks from Simple Icons (CC0), one path each on a 24x24 viewBox. */
+const SERVICE_ICONS: Record<Service, string> = {
+  whatsapp:
+    "M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413Z",
+  telegram:
+    "M11.944 0A12 12 0 0 0 0 12a12 12 0 0 0 12 12 12 12 0 0 0 12-12A12 12 0 0 0 12 0a12 12 0 0 0-.056 0zm4.962 7.224c.1-.002.321.023.465.14a.506.506 0 0 1 .171.325c.016.093.036.306.02.472-.18 1.898-.962 6.502-1.36 8.627-.168.9-.499 1.201-.82 1.23-.696.065-1.225-.46-1.9-.902-1.056-.693-1.653-1.124-2.678-1.8-1.185-.78-.417-1.21.258-1.91.177-.184 3.247-2.977 3.307-3.23.007-.032.014-.15-.056-.212s-.174-.041-.249-.024c-.106.024-1.793 1.14-5.061 3.345-.48.33-.913.49-1.302.48-.428-.008-1.252-.241-1.865-.44-.752-.245-1.349-.374-1.297-.789.027-.216.325-.437.893-.663 3.498-1.524 5.83-2.529 6.998-3.014 3.332-1.386 4.025-1.627 4.476-1.635z",
+  slack:
+    "M5.042 15.165a2.528 2.528 0 0 1-2.52 2.523A2.528 2.528 0 0 1 0 15.165a2.527 2.527 0 0 1 2.522-2.52h2.52v2.52zM6.313 15.165a2.527 2.527 0 0 1 2.521-2.52 2.527 2.527 0 0 1 2.521 2.52v6.313A2.528 2.528 0 0 1 8.834 24a2.528 2.528 0 0 1-2.521-2.522v-6.313zM8.834 5.042a2.528 2.528 0 0 1-2.521-2.52A2.528 2.528 0 0 1 8.834 0a2.528 2.528 0 0 1 2.521 2.522v2.52H8.834zM8.834 6.313a2.528 2.528 0 0 1 2.521 2.521 2.528 2.528 0 0 1-2.521 2.521H2.522A2.528 2.528 0 0 1 0 8.834a2.528 2.528 0 0 1 2.522-2.521h6.312zM18.956 8.834a2.528 2.528 0 0 1 2.522-2.521A2.528 2.528 0 0 1 24 8.834a2.528 2.528 0 0 1-2.522 2.521h-2.522V8.834zM17.688 8.834a2.528 2.528 0 0 1-2.523 2.521 2.527 2.527 0 0 1-2.52-2.521V2.522A2.527 2.527 0 0 1 15.165 0a2.528 2.528 0 0 1 2.523 2.522v6.312zM15.165 18.956a2.528 2.528 0 0 1 2.523 2.522A2.528 2.528 0 0 1 15.165 24a2.527 2.527 0 0 1-2.52-2.522v-2.522h2.52zM15.165 17.688a2.527 2.527 0 0 1-2.52-2.523 2.526 2.526 0 0 1 2.52-2.52h6.313A2.527 2.527 0 0 1 24 15.165a2.528 2.528 0 0 1-2.522 2.523h-6.313z",
+};
+
+function serviceIcon(service: Service): SVGSVGElement {
+  const ns = "http://www.w3.org/2000/svg";
+  const svg = document.createElementNS(ns, "svg");
+  svg.setAttribute("viewBox", "0 0 24 24");
+  svg.setAttribute("aria-hidden", "true");
+  svg.classList.add("brand");
+  const path = document.createElementNS(ns, "path");
+  path.setAttribute("d", SERVICE_ICONS[service]);
+  svg.append(path);
+  return svg;
+}
+
 interface Account {
   id: string;
   name: string;
+  service: Service;
 }
 
 interface Settings {
@@ -224,12 +251,19 @@ function renderAccounts(): void {
   el<HTMLUListElement>("dock-accounts").replaceChildren(
     ...settings.accounts.map((account) => {
       const item = document.createElement("li");
-      // One word: its first two letters. Several words: the first letter of the first two.
-      const words = account.name.trim().split(/\s+/);
-      const initials = (words.length > 1 ? words[0][0] + words[1][0] : words[0].slice(0, 2)).toUpperCase();
-      const avatar = button(initials, () => void show(account.id), "dock-btn");
-      avatar.title = account.name;
+      // The service's mark tells the accounts apart at a glance; the name sits underneath.
+      const described = `${account.name} · ${SERVICES[account.service]}`;
+      const avatar = button("", () => void show(account.id), "dock-btn");
+      avatar.append(serviceIcon(account.service));
+      avatar.title = described;
+      avatar.setAttribute("aria-label", described);
+      avatar.dataset.service = account.service;
       avatar.setAttribute("aria-current", String(!grid && active === account.id));
+      // Visible text for the same name the button already carries, so hidden from assistive tech.
+      const name = document.createElement("span");
+      name.className = "dock-name";
+      name.textContent = account.name;
+      name.setAttribute("aria-hidden", "true");
       const count = unread.get(`wa-${account.id}`) ?? 0;
       if (count > 0) {
         const badge = document.createElement("span");
@@ -237,10 +271,10 @@ function renderAccounts(): void {
         badge.textContent = count > 99 ? "99+" : String(count);
         // The badge is a number with no context on its own; fold it into the button's name.
         badge.setAttribute("aria-hidden", "true");
-        avatar.setAttribute("aria-label", `${account.name}, ${count} unread`);
+        avatar.setAttribute("aria-label", `${described}, ${count} unread`);
         avatar.append(badge);
       }
-      item.append(avatar);
+      item.append(avatar, name);
       return item;
     }),
   );
@@ -248,6 +282,11 @@ function renderAccounts(): void {
   el<HTMLUListElement>("accounts").replaceChildren(
     ...settings.accounts.map((account) => {
       const item = document.createElement("li");
+
+      const service = document.createElement("span");
+      service.className = "service";
+      service.dataset.service = account.service;
+      service.textContent = SERVICES[account.service];
 
       const name = document.createElement("input");
       name.type = "text";
@@ -288,6 +327,7 @@ function renderAccounts(): void {
       };
 
       item.append(
+        service,
         name,
         button("Reload", () => {
           void call<null>("reload_session", { id: account.id }).then((done) => {
@@ -353,11 +393,15 @@ async function subscribeSessionEvents(): Promise<void> {
   });
 
   // Sent by the backend once the dialog overlay has created an account and switched to it.
-  await listen<Settings>("accounts://added", (event) => {
-    grid = false;
-    active = selected = event.payload.accounts[event.payload.accounts.length - 1].id;
-    applyAccounts(event.payload);
-    log("info", "account added");
+  // A bare signal: the settings are read back from the backend, never taken from the event.
+  await listen("accounts://added", () => {
+    void call<Settings>("get_settings").then((saved) => {
+      if (!saved) return;
+      grid = false;
+      active = selected = saved.accounts[saved.accounts.length - 1].id;
+      applyAccounts(saved);
+      log("info", "account added");
+    });
   });
 
   // Emitted while the downloaded update streams in; `total` stays null when unknown.
@@ -376,7 +420,7 @@ async function subscribeSessionEvents(): Promise<void> {
   });
 
   await listen("session://unsupported", () => {
-    log("error", "WhatsApp Web reports an unsupported browser — change the User-Agent preset");
+    log("error", "An account's page reports an unsupported browser — change the User-Agent preset");
   });
 }
 
@@ -585,7 +629,7 @@ async function main(): Promise<void> {
     badgeUnreadCount: true,
     autostart: false,
     zoom: 1,
-    accounts: [{ id: "default", name: "Account 1" }],
+    accounts: [{ id: "default", name: "Account 1", service: "whatsapp" }],
     theme: "system",
   };
 
@@ -617,11 +661,12 @@ async function runAddDialog(): Promise<void> {
 
   const dialog = el<HTMLDialogElement>("add-account-dialog");
   const name = el<HTMLInputElement>("add-account-name");
+  const service = el<HTMLSelectElement>("add-account-service");
   const error = el<HTMLParagraphElement>("add-account-error");
 
   dialog.addEventListener("close", () => {
     void (async () => {
-      if (dialog.returnValue === "add") await call("add_account", { name: name.value });
+      if (dialog.returnValue === "add") await call("add_account", { name: name.value, service: service.value });
       await call("close_add_dialog");
     })();
   });

@@ -26,6 +26,9 @@
      theme-specific: dark ink on the dark accent is 6.3:1, but that same ink on the light accent
      would only be 3.9:1, so light mode needs white. */
   --accent-dim: #005c4b;
+  --whatsapp: #25d366;
+  --telegram: #2aabee;
+  --slack: #e01e5a;
   --on-accent: #04120e;
   --danger: #f15c6d;
   --shadow: 0 16px 48px rgb(0 0 0 / 0.5);
@@ -48,6 +51,9 @@
     --muted: #54656f;
     --accent: #008069;
     --accent-dim: #d9fdd3;
+    --whatsapp: #128c7e;
+    --telegram: #1d8fcf;
+    --slack: #e01e5a;
     --on-accent: #ffffff;
     --danger: #b3261e;
     --shadow: 0 16px 48px rgb(0 0 0 / 0.18);
@@ -66,6 +72,9 @@
   --muted: #54656f;
   --accent: #008069;
   --accent-dim: #d9fdd3;
+  --whatsapp: #128c7e;
+  --telegram: #1d8fcf;
+  --slack: #e01e5a;
   --on-accent: #ffffff;
   --danger: #b3261e;
   --shadow: 0 16px 48px rgb(0 0 0 / 0.18);
@@ -195,6 +204,53 @@ body {
   color: var(--on-accent);
   font-size: 10px;
   line-height: 16px;
+}
+
+/* Which web app an account loads, in the service's own colour. */
+[data-service] {
+  --service: var(--whatsapp);
+}
+
+[data-service="telegram"] {
+  --service: var(--telegram);
+}
+
+[data-service="slack"] {
+  --service: var(--slack);
+}
+
+/* Brand marks are solid shapes, unlike the stroked glyphs of the other dock buttons. */
+.dock-btn svg.brand {
+  width: 22px;
+  height: 22px;
+  fill: var(--service);
+  stroke: none;
+}
+
+.dock-btn[data-service] {
+  display: grid;
+  place-items: center;
+}
+
+.dock li {
+  display: grid;
+  justify-items: center;
+  gap: 3px;
+}
+
+/* The dock is 64px wide: a long name is cut with an ellipsis; the button's tooltip has it whole. */
+.dock-name {
+  max-inline-size: calc(var(--dock) - 8px);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 1.3;
+}
+
+.dock-btn[aria-current="true"] + .dock-name {
+  color: var(--text);
 }
 
 .gridbar {
@@ -517,6 +573,24 @@ button.ghost {
   padding: 7px 9px;
   background: var(--panel-2);
   border-radius: 8px;
+}
+
+.chats .service {
+  flex: none;
+  inline-size: 11ch;
+  white-space: nowrap;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.chats .service::before {
+  content: "";
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  margin-inline-end: 6px;
+  border-radius: 50%;
+  background: var(--service);
 }
 
 .chats input {

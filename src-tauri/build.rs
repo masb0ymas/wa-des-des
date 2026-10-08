@@ -16,6 +16,7 @@ fn main() {
                 "open_chat",
                 "reload_session",
                 "clear_session_data",
+                "session_report",
                 "test_notification",
                 "check_for_updates",
                 "install_update",

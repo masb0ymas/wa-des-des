@@ -18,13 +18,15 @@ mod ua;
 use serde::Serialize;
 use serde_json::json;
 use std::collections::HashMap;
-use std::sync::Mutex;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, Mutex};
+use std::time::{Duration, Instant};
 use tauri::menu::{Menu, MenuItem, PredefinedMenuItem};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
-use tauri::webview::WebviewBuilder;
+use tauri::webview::{PageLoadEvent, PermissionKind, PermissionResponse, WebviewBuilder};
 use tauri::utils::Theme;
 use tauri::{
-    AppHandle, Emitter, Listener, LogicalPosition, LogicalSize, Manager, Url, Webview, WebviewUrl, Window,
+    AppHandle, Emitter, LogicalPosition, LogicalSize, Manager, Url, Webview, WebviewUrl, Window,
 };
 use tauri_plugin_autostart::ManagerExt as _;
 // macOS delivers notifications through `notify` instead, so the plugin extension is only
@@ -38,7 +40,7 @@ mod settings;
 #[cfg(target_os = "macos")]
 mod notify;
 mod telemetry;
-use settings::{Account, Settings, ACCOUNT_LABEL_PREFIX, DEFAULT_ACCOUNT_ID};
+use settings::{Account, Service, Settings, ACCOUNT_LABEL_PREFIX, DEFAULT_ACCOUNT_ID};
 
 /// Label of the only window, and of its bundled UI webview.
 const MAIN_LABEL: &str = "main";
@@ -67,7 +69,12 @@ const GRID_MIN_ZOOM: f64 = 0.5;
 /// Tray icon id.
 const TRAY_ID: &str = "wa-tray";
 
-const WHATSAPP_URL: &str = "https://web.whatsapp.com/";
+/// Shortest time between two URLs handed to the system browser on behalf of a page.
+const OPEN_INTERVAL: Duration = Duration::from_millis(500);
+/// A second off-site navigation this soon after the first means the service itself redirects away
+/// (a captive portal, say), so sending the pane back to it would loop.
+const BOUNCE_LOOP: Duration = Duration::from_secs(10);
+
 /// Chat deep link. `phone` is digits only, including the country code.
 const WHATSAPP_CHAT_URL: &str = "https://web.whatsapp.com/send?phone=";
 
@@ -502,27 +509,39 @@ fn close_add_dialog(app: AppHandle) {
 /// Adds an account with a fresh, isolated data store and switches to it. The other accounts'
 /// webviews are not touched. Called from the dialog overlay, so the dock is told through an event.
 #[tauri::command]
-async fn add_account(app: AppHandle, name: String) -> Result<Settings, String> {
+async fn add_account(app: AppHandle, name: String, service: Service) -> Result<Settings, String> {
     let platform = platform();
     let mut settings = settings::load(&app, platform.id);
+    // Without separate stores a second account of a service would silently share the first one's
+    // login. Different services are different origins, so those stay apart regardless.
+    if !isolated_stores() && settings.accounts.iter().any(|account| account.service == service) {
+        let message = format!(
+            "A second {} account needs macOS 14 or later: older systems cannot keep the logins apart",
+            service.name()
+        );
+        // The dialog overlay is already closing; the dock logs this event's text as an error.
+        let _ = app.emit_to(MAIN_LABEL, "notifications://denied", &message);
+        return Err(message);
+    }
     let name = match name.trim() {
         "" => format!("Account {}", settings.accounts.len() + 1),
         name => name.to_string(),
     };
-    let account = Account::new(name);
+    let account = Account::new(name, service);
     settings.accounts.push(account.clone());
     let settings = settings.normalize(platform.id);
     settings::save(&app, &settings).map_err(err)?;
 
     build_account_webview(&app, &account, &settings).map_err(err)?;
     show_account(&app, Some(&account.id));
-    let _ = app.emit_to(MAIN_LABEL, "accounts://added", &settings);
+    // A bare signal: the dock re-reads the settings instead of trusting an event payload.
+    let _ = app.emit_to(MAIN_LABEL, "accounts://added", ());
     Ok(settings)
 }
 
 /// Unlinks an account: wipes its data store, closes its webview and forgets it.
 #[tauri::command]
-fn remove_account(app: AppHandle, id: String) -> Result<Settings, String> {
+async fn remove_account(app: AppHandle, id: String) -> Result<Settings, String> {
     let mut settings = settings::load(&app, platform().id);
     if settings.accounts.len() <= 1 {
         return Err("the last account cannot be removed; clear its data instead".into());
@@ -554,6 +573,18 @@ fn remove_account(app: AppHandle, id: String) -> Result<Settings, String> {
         }
     }
     apply_view(&app);
+
+    // WKWebView keeps the store itself after its data is cleared. It can only be removed once the
+    // engine has let go of the closed webview, which it does not signal, hence the retries.
+    #[cfg(target_os = "macos")]
+    if let Some(store_id) = account.store_id().filter(|_| isolated_stores()) {
+        for _ in 0..5 {
+            if app.remove_data_store(store_id).await.is_ok() {
+                break;
+            }
+            std::thread::sleep(Duration::from_millis(300));
+        }
+    }
     Ok(settings)
 }
 
@@ -602,6 +633,11 @@ fn open_chat(app: AppHandle, id: String, jid: String) -> Result<(), String> {
     if digits.is_empty() {
         return Err(format!("`{jid}` does not start with a phone number"));
     }
+    // The phone-number deep link is WhatsApp's; the other services have no equivalent.
+    let service = account_service(&app, &id)?;
+    if service != Service::Whatsapp {
+        return Err(format!("opening a chat by number is not available for {}", service.name()));
+    }
 
     account_webview(&app, &id)?
         .navigate(parse_url(&format!("{WHATSAPP_CHAT_URL}{digits}")))
@@ -622,7 +658,8 @@ fn reload_session(app: AppHandle, id: String) -> Result<(), String> {
 #[tauri::command]
 async fn clear_session_data(app: AppHandle, id: String) -> Result<(), String> {
     let webview = account_webview(&app, &id)?;
-    // WhatsApp Web has to be unloaded first: a live page keeps its session in memory and writes it
+    let service = account_service(&app, &id)?;
+    // The page has to be unloaded first: a live page keeps its session in memory and writes it
     // straight back to storage, which is how a wipe followed by a plain reload stays logged in.
     webview
         .navigate(Url::parse("about:blank").map_err(err)?)
@@ -637,7 +674,7 @@ async fn clear_session_data(app: AppHandle, id: String) -> Result<(), String> {
     if let Ok(mut state) = app.state::<Mutex<SessionState>>().lock() {
         state.unread.remove(webview.label());
     }
-    webview.navigate(parse_url(WHATSAPP_URL)).map_err(err)?;
+    webview.navigate(parse_url(service.url())).map_err(err)?;
     show_account(&app, Some(&id));
     Ok(())
 }
@@ -723,12 +760,61 @@ async fn install_update(app: AppHandle) -> Result<(), String> {
     app.restart();
 }
 
-/// Parses a compile-time-known WhatsApp URL.
+/// Which web app an account loads.
+fn account_service(app: &AppHandle, id: &str) -> Result<Service, String> {
+    settings::load(app, platform().id)
+        .accounts
+        .iter()
+        .find(|account| account.id == id)
+        .map(|account| account.service)
+        .ok_or_else(|| format!("unknown account `{id}`"))
+}
+
+/// Whether an added account gets a data store of its own. WKWebView only has per-identifier stores
+/// from macOS 14; before that every account falls back to the shared default store.
+fn isolated_stores() -> bool {
+    cfg!(not(target_os = "macos"))
+        || std::process::Command::new("/usr/bin/sw_vers")
+            .arg("-productVersion")
+            .output()
+            .ok()
+            .and_then(|output| String::from_utf8(output.stdout).ok())
+            .map_or(true, |version| major_at_least(&version, 14))
+}
+
+/// `true` when the version cannot be read, so an unexpected format never blocks adding accounts.
+fn major_at_least(version: &str, min: u32) -> bool {
+    version
+        .trim()
+        .split('.')
+        .next()
+        .and_then(|major| major.parse::<u32>().ok())
+        .map_or(true, |major| major >= min)
+}
+
+/// Hands a URL chosen by a remote page to the system browser: web schemes only, and at most one
+/// per [`OPEN_INTERVAL`], so a page cannot flood the browser with tabs.
+fn open_external(url: &Url) {
+    static LAST: Mutex<Option<Instant>> = Mutex::new(None);
+    if !matches!(url.scheme(), "http" | "https" | "mailto") {
+        return;
+    }
+    let Ok(mut last) = LAST.lock() else {
+        return;
+    };
+    if last.is_some_and(|at| at.elapsed() < OPEN_INTERVAL) {
+        return;
+    }
+    *last = Some(Instant::now());
+    let _ = tauri_plugin_opener::open_url(url.as_str(), None::<&str>);
+}
+
+/// Parses a compile-time-known service URL.
 ///
 /// The literals above are constant, so a failure is a programming error rather than user input;
 /// panicking keeps the signature free of an impossible error path.
 fn parse_url(url: &str) -> Url {
-    Url::parse(url).expect("hard-coded WhatsApp URL is valid")
+    Url::parse(url).expect("hard-coded service URL is valid")
 }
 
 /// Profile directory of a non-default account on the engines that take one (WebView2, WebKitGTK).
@@ -751,17 +837,65 @@ fn build_account_webview(
     }
     let window = main_window(app)?;
 
-    let mut builder = WebviewBuilder::new(&label, WebviewUrl::External(parse_url(WHATSAPP_URL)))
+    let service = account.service;
+    // Whether the top frame is on the service's own site. Written by the page-load hook, read by
+    // the permission hook, which is not told which origin is asking.
+    let on_service = Arc::new(AtomicBool::new(false));
+    let last_bounce = Mutex::new(None::<Instant>);
+
+    let mut builder = WebviewBuilder::new(&label, WebviewUrl::External(parse_url(service.url())))
         .zoom_hotkeys_enabled(true)
         .enable_clipboard_access()
         .initialization_script(SESSION_BOOTSTRAP)
         // Links in messages are `target="_blank"`; an embedded webview has no tab to open them in,
-        // so hand them to the system browser. The URL comes from a remote page: web schemes only.
+        // so hand them to the system browser.
         .on_new_window(|url, _features| {
-            if matches!(url.scheme(), "http" | "https" | "mailto") {
-                let _ = tauri_plugin_opener::open_url(url.as_str(), None::<&str>);
-            }
+            open_external(&url);
             tauri::webview::NewWindowResponse::Deny
+        })
+        // Keeps the pane on its service. Done here rather than in `on_navigation`, which WKWebView
+        // also calls for iframes without saying so; page loads are reported for the top frame only.
+        .on_page_load({
+            let on_service = on_service.clone();
+            move |webview, payload| {
+                if payload.event() != PageLoadEvent::Started {
+                    return;
+                }
+                let url = payload.url();
+                let owned = service.owns(url);
+                on_service.store(owned, Ordering::Relaxed);
+                // Slack signs in through third-party identity providers in this same frame, so its
+                // pane may leave the site; it just gets no device access while it is away.
+                if owned || service == Service::Slack || !matches!(url.scheme(), "http" | "https") {
+                    return;
+                }
+                // Another site inside an account pane has no address bar to give it away: show it
+                // in the browser instead and bring the service back.
+                open_external(url);
+                let looping = last_bounce
+                    .lock()
+                    .ok()
+                    .and_then(|mut last| last.replace(Instant::now()))
+                    .is_some_and(|at| at.elapsed() < BOUNCE_LOOP);
+                let target = if looping { "about:blank" } else { service.url() };
+                // Queued, not called inline: this runs inside the engine's own load callback.
+                tauri::async_runtime::spawn(async move {
+                    let _ = webview.navigate(parse_url(target));
+                });
+            }
+        })
+        // Without a handler WKWebView grants camera and microphone to whatever page asks.
+        .on_permission_request(move |_webview, kind| {
+            if !on_service.load(Ordering::Relaxed) {
+                return PermissionResponse::Deny;
+            }
+            match kind {
+                // Calls and voice notes; the OS prompt for the app itself still applies.
+                PermissionKind::Microphone | PermissionKind::Camera if cfg!(target_os = "macos") => {
+                    PermissionResponse::Allow
+                }
+                _ => PermissionResponse::Default,
+            }
         });
 
     // The UA has to be installed before the first navigation; there is no runtime setter.
@@ -849,22 +983,13 @@ const SESSION_BOOTSTRAP: &str = r#"
   sanitize();
   document.addEventListener('DOMContentLoaded', sanitize);
 
-  const label = (() => {
+  // The only command these pages may call. The shell takes the account from the calling webview,
+  // so nothing here can speak for another account.
+  const report = (kind, payload) => {
     try {
-      return window.__TAURI_INTERNALS__?.metadata?.currentWebview?.label || 'wa-default';
+      window.__TAURI_INTERNALS__?.invoke('session_report', { kind, payload: payload || {} })?.catch(() => {});
     } catch (error) {
-      return 'wa-default';
-    }
-  })();
-
-  const report = (event, payload) => {
-    try {
-      window.__TAURI_INTERNALS__?.invoke('plugin:event|emit', {
-        event,
-        payload,
-      });
-    } catch (error) {
-      console.debug('[wa] event failed', event, error);
+      console.debug('[wa] report failed', kind, error);
     }
   };
 
@@ -881,7 +1006,7 @@ const SESSION_BOOTSTRAP: &str = r#"
       this.tag = String(opts.tag ?? '');
       this.data = opts.data ?? null;
       this.onclick = this.onclose = this.onerror = this.onshow = null;
-      report('session://notification', { title: this.title, body: this.body, label });
+      report('notification', { title: this.title, body: this.body });
     }
     close() {}
     static requestPermission(callback) {
@@ -911,17 +1036,17 @@ const SESSION_BOOTSTRAP: &str = r#"
   const flagUnsupported = () => {
     const text = document.body ? document.body.innerText || '' : '';
     if (UNSUPPORTED.test(text.slice(0, 4000))) {
-      report('session://unsupported', { userAgent: navigator.userAgent, label });
+      report('unsupported', { userAgent: navigator.userAgent });
     }
   };
 
   const readUserAgent = () => {
-    report('session://user-agent', { userAgent: navigator.userAgent, label });
+    report('user-agent', { userAgent: navigator.userAgent });
   };
 
   const readUnread = () => {
     const match = /^\((\d+)\)/.exec(document.title || '');
-    report('session://unread', { count: match ? Number(match[1]) : 0, label });
+    report('unread', { count: match ? Number(match[1]) : 0 });
   };
 
   let pending = false;
@@ -966,7 +1091,7 @@ const SESSION_BOOTSTRAP: &str = r#"
 
 /// Menu wiring for the tray.
 fn build_tray(app: &AppHandle) -> tauri::Result<()> {
-    let open = MenuItem::with_id(app, "open", "Open WhatsApp", true, None::<&str>)?;
+    let open = MenuItem::with_id(app, "open", "Open WaDesk", true, None::<&str>)?;
     let reload = MenuItem::with_id(app, "reload", "Reload current account", true, None::<&str>)?;
     let quit = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
     let menu = Menu::with_items(
@@ -1014,97 +1139,95 @@ fn build_tray(app: &AppHandle) -> tauri::Result<()> {
     Ok(())
 }
 
-/// Keeps the app badge in sync with the WhatsApp pages.
+/// Reports from the bootstrap script, and the only command a remote page may call.
 ///
-/// The bootstrap script reports `{ label, count }`; the webview label is what tells the accounts
-/// apart. The dock listens to the same event for its per-account badges.
-fn watch_session(app: &AppHandle) {
-    let handle = app.clone();
-    app.listen("session://unread", move |event| {
-        let Ok(payload) = serde_json::from_str::<serde_json::Value>(event.payload()) else {
-            return;
-        };
-        let Some(label) = payload.get("label").and_then(serde_json::Value::as_str) else {
-            return;
-        };
-        let count = payload
-            .get("count")
-            .and_then(serde_json::Value::as_u64)
-            .unwrap_or(0) as u32;
-
-        let total = {
-            let state = handle.state::<Mutex<SessionState>>();
-            let Ok(mut state) = state.lock() else {
-                return;
-            };
-            if state.unread.get(label).copied() == Some(count) {
-                return;
-            }
-            state.unread.insert(label.to_string(), count);
-            state.unread.values().copied().sum::<u32>()
-        };
-
-        let settings = settings::load(&handle, platform().id);
-        if !settings.badge_unread_count {
-            return;
+/// The account is the calling webview, which the runtime supplies; nothing in the payload can name
+/// another one. Everything else in the payload is untrusted text from a remote page.
+#[tauri::command]
+fn session_report(app: AppHandle, webview: Webview, kind: String, payload: serde_json::Value) {
+    let label = webview.label();
+    let text = |key: &str, max: usize| -> String {
+        payload
+            .get(key)
+            .and_then(serde_json::Value::as_str)
+            .unwrap_or_default()
+            .chars()
+            .take(max)
+            .collect()
+    };
+    match kind.as_str() {
+        "unread" => {
+            let count = payload.get("count").and_then(serde_json::Value::as_u64).unwrap_or(0);
+            report_unread(&app, label, count.min(u64::from(u32::MAX)) as u32);
         }
-
-        let Some(window) = handle.get_window(MAIN_LABEL) else {
-            return;
-        };
-
-        #[cfg(target_os = "macos")]
-        {
-            let _ = window.set_badge_label(if total == 0 {
-                None
-            } else {
-                Some(total.to_string())
-            });
+        "notification" => notify_message(&app, label, text("title", 100), &text("body", 300)),
+        "user-agent" | "unsupported" => {
+            let _ = app.emit_to(
+                MAIN_LABEL,
+                &format!("session://{kind}"),
+                json!({ "label": label, "userAgent": text("userAgent", 512) }),
+            );
         }
-        #[cfg(not(target_os = "macos"))]
-        {
-            let _ = (window, total);
-        }
-    });
+        _ => {}
+    }
 }
 
-/// Shows the notifications WhatsApp Web raises through the bootstrap script's `Notification`.
-fn watch_notifications(app: &AppHandle) {
-    let handle = app.clone();
-    app.listen("session://notification", move |event| {
-        let Ok(payload) = serde_json::from_str::<serde_json::Value>(event.payload()) else {
+/// Records an account's unread counter, tells the dock, and keeps the app badge in sync.
+fn report_unread(app: &AppHandle, label: &str, count: u32) {
+    let _ = app.emit_to(MAIN_LABEL, "session://unread", json!({ "label": label, "count": count }));
+
+    let total = {
+        let state = app.state::<Mutex<SessionState>>();
+        let Ok(mut state) = state.lock() else {
             return;
         };
-        // The payload comes from a remote page: treat it as untrusted text and bound its size.
-        let text = |key: &str, max: usize| -> String {
-            payload
-                .get(key)
-                .and_then(serde_json::Value::as_str)
-                .unwrap_or_default()
-                .chars()
-                .take(max)
-                .collect()
-        };
-        let label = text("label", 64);
-
-        let settings = settings::load(&handle, platform().id);
-        if !settings.native_notifications {
+        if state.unread.get(label).copied() == Some(count) {
             return;
         }
+        state.unread.insert(label.to_string(), count);
+        state.unread.values().copied().sum::<u32>()
+    };
 
-        let mut title = text("title", 100);
-        if title.is_empty() {
-            title = "WhatsApp".to_string();
-        }
-        // With several accounts, say which one the message is for.
-        if settings.accounts.len() > 1 {
-            if let Some(account) = settings.accounts.iter().find(|a| a.label() == label) {
-                title = format!("{title} · {}", account.name);
-            }
-        }
+    if !settings::load(app, platform().id).badge_unread_count {
+        return;
+    }
+    let Some(window) = app.get_window(MAIN_LABEL) else {
+        return;
+    };
 
-        let _ = show_notification(&handle, &title, &text("body", 300));
-    });
+    #[cfg(target_os = "macos")]
+    {
+        let _ = window.set_badge_label(if total == 0 {
+            None
+        } else {
+            Some(total.to_string())
+        });
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        let _ = (window, total);
+    }
+}
+
+/// Shows a notification an account page raised through the bootstrap script's `Notification`.
+fn notify_message(app: &AppHandle, label: &str, mut title: String, body: &str) {
+    let settings = settings::load(app, platform().id);
+    if !settings.native_notifications {
+        return;
+    }
+
+    let account = settings.accounts.iter().find(|a| a.label() == label);
+    if title.is_empty() {
+        title = account.map(|a| a.service).unwrap_or_default().name().to_string();
+    }
+    // With several accounts, say which one the message is for.
+    if settings.accounts.len() > 1 {
+        if let Some(account) = account {
+            title = format!("{title} · {}", account.name);
+        }
+    }
+
+    let _ = show_notification(app, &title, body);
 }
 
 /// Fixes the process's bundle identifier before any webview exists (macOS, `tauri dev` only).
@@ -1168,6 +1291,7 @@ pub fn run() {
             open_chat,
             reload_session,
             clear_session_data,
+            session_report,
             test_notification,
             check_for_updates,
             install_update,
@@ -1175,8 +1299,6 @@ pub fn run() {
         .setup(|app| {
             let handle = app.handle().clone();
             build_tray(&handle)?;
-            watch_session(&handle);
-            watch_notifications(&handle);
 
             // Every account is loaded up front so hidden ones still receive messages.
             let settings = settings::load(&handle, platform().id);
@@ -1261,10 +1383,14 @@ mod tests {
         assert!(SESSION_BOOTSTRAP.contains("Electron"));
         assert!(SESSION_BOOTSTRAP.contains("Tauri"));
         assert!(SESSION_BOOTSTRAP.contains("wry"));
-        assert!(SESSION_BOOTSTRAP.contains("session://user-agent"));
-        assert!(SESSION_BOOTSTRAP.contains("session://unread"));
-        assert!(SESSION_BOOTSTRAP.contains("currentWebview"));
-        assert!(SESSION_BOOTSTRAP.contains("session://notification"));
+        assert!(SESSION_BOOTSTRAP.contains("session_report"));
+        for kind in ["'user-agent'", "'unread'", "'notification'", "'unsupported'"] {
+            assert!(SESSION_BOOTSTRAP.contains(kind), "{kind} is reported");
+        }
+        // Pages report through the one command; they must not be able to emit app events or name
+        // the account they speak for.
+        assert!(!SESSION_BOOTSTRAP.contains("plugin:event"));
+        assert!(!SESSION_BOOTSTRAP.contains("label"));
     }
 
     /// The two panes of the default 2x1 view must meet edge to edge: no seam, no overflow.
@@ -1378,8 +1504,18 @@ mod tests {
     }
 
     #[test]
-    fn whatsapp_urls_are_https() {
-        assert!(WHATSAPP_URL.starts_with("https://"));
+    fn only_a_readable_older_version_counts_as_too_old() {
+        assert!(major_at_least("15.7.5\n", 14));
+        assert!(major_at_least("14.0", 14));
+        assert!(!major_at_least("13.6.1", 14));
+        assert!(major_at_least("", 14), "unreadable: do not block");
+    }
+
+    #[test]
+    fn service_urls_are_https() {
+        for service in Service::ALL {
+            assert_eq!(parse_url(service.url()).scheme(), "https", "{}", service.name());
+        }
         assert!(WHATSAPP_CHAT_URL.starts_with("https://"));
     }
 }

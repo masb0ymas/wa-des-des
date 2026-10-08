@@ -1,12 +1,14 @@
 # WaDesk
 
-Desktop shell for WhatsApp Web built with Tauri v2. One window: a dock on the left edge lists the
-accounts, and each account is its own native webview loading `https://web.whatsapp.com` next to it.
+Desktop shell for WhatsApp Web, Telegram Web and Slack built with Tauri v2. One window: a dock on
+the left edge lists the accounts, and each account is its own native webview loading the service's
+web app next to it.
 The settings live in the same window (gear button in the dock).
 
 ## Multiple accounts
 
-Press **+** in the dock to add an account. It gets a new webview with an isolated data store
+Press **+** in the dock to add an account and pick its service: WhatsApp, Telegram or Slack. It
+gets a new webview with an isolated data store
 (WebView2/WebKitGTK: `<app data>/accounts/<id>`; WKWebView: a data-store identifier, macOS 14+),
 so the accounts that are already linked are not reloaded or logged out. All accounts stay loaded in
 the background and keep receiving messages; the dock shows each one's unread count. The first
@@ -90,13 +92,18 @@ src-tauri/capabilities/    IPC permissions, split per webview class
 
 ## Security model
 
-The account webviews render third-party code from `web.whatsapp.com`. Tauri's ACL treats remote
+The account webviews render third-party code from `web.whatsapp.com`, `web.telegram.org` or
+`*.slack.com`. Tauri's ACL treats remote
 origins as untrusted:
 
 - Custom commands are **unreachable** from a remote page unless a capability explicitly lists the
-  origin under `remote.urls`. `capabilities/session.json` grants the `wa-*` webviews only
-  `core:event:allow-emit`, so WhatsApp Web code cannot reach any app command even if it calls
-  `__TAURI_INTERNALS__.invoke`.
+  origin under `remote.urls`. `capabilities/session.json` grants the `wa-*` webviews one command,
+  `session_report`, on the three app origins only. It takes the account from the calling webview,
+  so a page can report its own unread count and notifications and nothing else; every other
+  command stays out of reach even if the page calls `__TAURI_INTERNALS__.invoke`.
+- An account pane stays on its service: a top-level navigation to another site is opened in the
+  system browser instead (Slack is exempt, because its sign-in passes through identity
+  providers), and camera/microphone requests are denied whenever the pane is off its service.
 - `capabilities/launcher.json` is `local: true` and bound to the bundled `main` webview (by
   webview label, since every webview shares the one window), which is the only place that can
   change settings or accounts.

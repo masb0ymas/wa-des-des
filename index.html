@@ -181,6 +181,14 @@
     <dialog id="add-account-dialog">
       <form method="dialog" aria-labelledby="add-account-title">
         <h2 id="add-account-title">Add account</h2>
+        <label class="field" for="add-account-service">
+          <span>Service</span>
+          <select id="add-account-service">
+            <option value="whatsapp">WhatsApp</option>
+            <option value="telegram">Telegram</option>
+            <option value="slack">Slack</option>
+          </select>
+        </label>
         <label class="field" for="add-account-name">
           <span>Name</span>
           <input

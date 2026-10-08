@@ -17,17 +17,72 @@ pub const DEFAULT_ACCOUNT_ID: &str = "default";
 /// Webview label prefix for account webviews; the account id is appended.
 pub const ACCOUNT_LABEL_PREFIX: &str = "wa-";
 
-/// One WhatsApp login, backed by its own webview and its own data store.
+/// The web app an account loads.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum Service {
+    #[default]
+    Whatsapp,
+    Telegram,
+    Slack,
+}
+
+impl Service {
+    #[cfg(test)]
+    pub const ALL: [Service; 3] = [Service::Whatsapp, Service::Telegram, Service::Slack];
+
+    /// Page the account's webview starts on, and returns to after its data is cleared.
+    pub fn url(self) -> &'static str {
+        match self {
+            Service::Whatsapp => "https://web.whatsapp.com/",
+            Service::Telegram => "https://web.telegram.org/a/",
+            Service::Slack => "https://app.slack.com/client",
+        }
+    }
+
+    /// Registrable domain the service runs on; its subdomains count as the service too.
+    pub fn domain(self) -> &'static str {
+        match self {
+            Service::Whatsapp => "whatsapp.com",
+            Service::Telegram => "telegram.org",
+            Service::Slack => "slack.com",
+        }
+    }
+
+    /// Whether `url` is a page of this service, as opposed to wherever its webview navigated to.
+    pub fn owns(self, url: &tauri::Url) -> bool {
+        url.scheme() == "https"
+            && url.host_str().is_some_and(|host| {
+                host == self.domain()
+                    || host
+                        .strip_suffix(self.domain())
+                        .is_some_and(|subdomain| subdomain.ends_with('.'))
+            })
+    }
+
+    pub fn name(self) -> &'static str {
+        match self {
+            Service::Whatsapp => "WhatsApp",
+            Service::Telegram => "Telegram",
+            Service::Slack => "Slack",
+        }
+    }
+}
+
+/// One login to a [`Service`], backed by its own webview and its own data store.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Account {
     /// `default`, or the creation time in nanoseconds as lowercase hex.
     pub id: String,
     pub name: String,
+    /// Defaulted so accounts saved before other services existed stay WhatsApp.
+    #[serde(default)]
+    pub service: Service,
 }
 
 impl Account {
-    pub fn new(name: String) -> Self {
+    pub fn new(name: String, service: Service) -> Self {
         let nanos = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .map(|elapsed| elapsed.as_nanos())
@@ -35,6 +90,7 @@ impl Account {
         Self {
             id: format!("{nanos:x}"),
             name,
+            service,
         }
     }
 
@@ -96,6 +152,7 @@ impl Settings {
             accounts: vec![Account {
                 id: DEFAULT_ACCOUNT_ID.to_string(),
                 name: "Account 1".to_string(),
+                service: Service::default(),
             }],
         }
     }
@@ -270,19 +327,44 @@ mod tests {
         assert_eq!(settings.accounts.len(), 1);
         assert_eq!(settings.accounts[0].id, DEFAULT_ACCOUNT_ID);
         assert_eq!(settings.accounts[0].store_id(), None);
+        assert_eq!(settings.accounts[0].service, Service::Whatsapp);
 
-        let added = Account::new("  Work  ".into());
+        let added = Account::new("  Work  ".into(), Service::Telegram);
         assert!(added.store_id().is_some());
         settings.accounts.push(added.clone());
         settings.accounts.push(added.clone());
         settings.accounts.push(Account {
             id: "../../etc".into(),
             name: "evil".into(),
+            service: Service::Slack,
         });
         let settings = settings.normalize("linux");
         assert_eq!(settings.accounts.len(), 2, "duplicate and unsafe ids are dropped");
         assert_eq!(settings.accounts[1].name, "Work");
         assert_eq!(settings.accounts[1].label(), format!("wa-{}", added.id));
+
+        // The service survives a save, and a pre-service account entry reads back as WhatsApp.
+        let raw = serde_json::to_string(&settings).expect("serializes");
+        assert!(raw.contains(r#""service":"telegram""#));
+        let reloaded: Settings = serde_json::from_str(&raw).expect("deserializes");
+        assert_eq!(reloaded.accounts[1].service, Service::Telegram);
+        let legacy: Account = serde_json::from_str(r#"{"id":"default","name":"AS"}"#).expect("parses");
+        assert_eq!(legacy.service, Service::Whatsapp);
+    }
+
+    #[test]
+    fn a_service_owns_only_https_pages_of_its_own_domain() {
+        let owns = |url: &str| Service::Whatsapp.owns(&tauri::Url::parse(url).expect("valid url"));
+        assert!(owns("https://web.whatsapp.com/send?phone=1"));
+        assert!(owns("https://whatsapp.com/"));
+        assert!(!owns("http://web.whatsapp.com/"), "cleartext is not the service");
+        assert!(!owns("https://evilwhatsapp.com/"), "a suffix match is not a subdomain");
+        assert!(!owns("https://web.whatsapp.com.evil.example/"));
+        assert!(!owns("https://web.telegram.org/a/"));
+        assert!(!owns("about:blank"));
+        for service in Service::ALL {
+            assert!(service.owns(&tauri::Url::parse(service.url()).expect("valid url")));
+        }
     }
 
     #[test]
