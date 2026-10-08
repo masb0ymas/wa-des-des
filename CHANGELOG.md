@@ -3,6 +3,14 @@
 All notable changes to WaDesk will be documented in this file.
 
 
+## [0.2.2](https://github.com/masb0ymas/wa-des-des/compare/v0.2.1...v0.2.2) (2026-10-08)
+
+### Bug Fixes
+
+* **session:** open message links in the system browser ([a2991e6](https://github.com/masb0ymas/wa-des-des/commit/a2991e64d5a3cecddbbfb6a5c88dd4bfdc43cbab))
+* update icon ([7a1ba50](https://github.com/masb0ymas/wa-des-des/commit/7a1ba503e0f061f36800418655c5bc1fa8022fd0))
+* update readme ([9fef7d6](https://github.com/masb0ymas/wa-des-des/commit/9fef7d66a0c88a94140c7dbdeb4b5044b5023b4f))
+
 ## [0.2.1](https://github.com/masb0ymas/wa-des-des/compare/v0.2.0...v0.2.1) (2026-10-08)
 
 ### Features
