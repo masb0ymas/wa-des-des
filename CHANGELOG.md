@@ -3,6 +3,12 @@
 All notable changes to WaDesk will be documented in this file.
 
 
+## [0.2.1](https://github.com/masb0ymas/wa-des-des/compare/v0.2.0...v0.2.1) (2026-10-08)
+
+### Features
+
+* **accounts:** show unread badges for Telegram and Slack ([6c0e41f](https://github.com/masb0ymas/wa-des-des/commit/6c0e41f537f16000afac48b373d74b41ca625286))
+
 ## [0.2.0](https://github.com/masb0ymas/wa-des-des/compare/v0.1.4...v0.2.0) (2026-10-08)
 
 ### Features
