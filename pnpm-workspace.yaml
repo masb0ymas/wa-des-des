@@ -1,2 +1,8 @@
 allowBuilds:
   esbuild: true
+
+# Patched releases of release-it's transitive dependencies (see ISSUES.md, L3). Drop an entry once
+# release-it itself depends on a fixed version.
+overrides:
+  undici@>=7.0.0 <7.29.1: ^7.29.1
+  basic-ftp@<6.2.1: ^6.2.1
