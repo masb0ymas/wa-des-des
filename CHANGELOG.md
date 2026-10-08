@@ -3,6 +3,17 @@
 All notable changes to WaDesk will be documented in this file.
 
 
+## [0.2.0](https://github.com/masb0ymas/wa-des-des/compare/v0.1.4...v0.2.0) (2026-10-08)
+
+### Features
+
+* **accounts:** add Telegram and Slack accounts ([ab4556f](https://github.com/masb0ymas/wa-des-des/commit/ab4556ffa82e486057bbc4b3f8b19dfc70c5379d))
+
+### Bug Fixes
+
+* **security:** disable telemetry PII and drop the local networking exception ([43651e1](https://github.com/masb0ymas/wa-des-des/commit/43651e1a4862a6352491896397894a2023344be2))
+* **webview:** open message links in system browser and report unread for hidden accounts ([d2dcbbd](https://github.com/masb0ymas/wa-des-des/commit/d2dcbbd2cff7849aee8404c125cbc24f2e67c101))
+
 ## [0.1.4](https://github.com/masb0ymas/wa-des-des/compare/v0.1.3...v0.1.4) (2026-10-07)
 
 ### Bug Fixes
