@@ -1286,8 +1286,20 @@ pub fn run() {
     }));
 
     builder
-        .plugin(tauri_plugin_opener::init())
+        .plugin(
+            // The plugin's default JS link interceptor calls `preventDefault()` on every
+            // `target="_blank"` click and then opens the URL through its own command, which the
+            // account panes are not allowed to call — so the click is swallowed and nothing opens.
+            // `on_new_window` in `build_account_webview` is the path that hands message links to the
+            // system browser, and it only sees the click if this interceptor is off.
+            tauri_plugin_opener::Builder::new()
+                .open_js_links_on_click(false)
+                .build(),
+        )
         .plugin(tauri_plugin_notification::init())
+        // Telegram Web opens links by calling `plugin:shell|open`; the capability in
+        // `capabilities/session.json` restricts that to web schemes on the account panes.
+        .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(
             tauri_plugin_window_state::Builder::new()

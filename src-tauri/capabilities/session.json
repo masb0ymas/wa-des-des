@@ -1,11 +1,11 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "identifier": "session",
-  "description": "Permissions for the account webviews that load WhatsApp Web, Telegram Web or Slack from the remote origin. Deliberately minimal: third-party code runs in these webviews, so the only things granted are the command the injected bootstrap script reports through and the unread-count command Telegram Web calls on its own, on the app pages alone.",
+  "description": "Permissions for the account webviews that load WhatsApp Web, Telegram Web or Slack from the remote origin. Deliberately minimal: third-party code runs in these webviews, so the only things granted are the command the injected bootstrap script reports through, the unread-count command Telegram Web calls on its own, and the link opener Telegram Web calls when a message link is clicked. The opener is restricted to web schemes by `plugins.shell.open` in tauri.conf.json; it is granted to every account origin because the shell plugin installs its link handler in all of them, and a scheme the scope rejects would be a dead click rather than a fallback.",
   "local": false,
   "remote": {
     "urls": ["https://web.whatsapp.com/*", "https://web.telegram.org/*", "https://app.slack.com/*"]
   },
   "webviews": ["wa-*"],
-  "permissions": ["allow-session-report", "allow-set-notifications-count"]
+  "permissions": ["allow-session-report", "allow-set-notifications-count", "shell:allow-open"]
 }

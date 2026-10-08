@@ -43,6 +43,9 @@
     }
   },
   "plugins": {
+    "shell": {
+      "open": "((mailto:\\w+)|(tel:\\w+)|(https?://\\w+)).+"
+    },
     "updater": {
       "endpoints": [
         "https://github.com/masb0ymas/wa-des-des/releases/latest/download/latest.json"
