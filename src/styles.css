@@ -29,6 +29,12 @@
   --whatsapp: #25d366;
   --telegram: #2aabee;
   --slack: #e01e5a;
+  /* Hovered or shown account in the dock: an inverted disc, so the brand mark sits on the
+     surface it was drawn for. The -pick colours are the brand colours for that surface. */
+  --pick: #ffffff;
+  --whatsapp-pick: #128c7e;
+  --telegram-pick: #1d8fcf;
+  --slack-pick: #e01e5a;
   --on-accent: #04120e;
   --danger: #f15c6d;
   --shadow: 0 16px 48px rgb(0 0 0 / 0.5);
@@ -54,6 +60,10 @@
     --whatsapp: #128c7e;
     --telegram: #1d8fcf;
     --slack: #e01e5a;
+    --pick: #111b21;
+    --whatsapp-pick: #25d366;
+    --telegram-pick: #2aabee;
+    --slack-pick: #e01e5a;
     --on-accent: #ffffff;
     --danger: #b3261e;
     --shadow: 0 16px 48px rgb(0 0 0 / 0.18);
@@ -75,6 +85,10 @@
   --whatsapp: #128c7e;
   --telegram: #1d8fcf;
   --slack: #e01e5a;
+  --pick: #111b21;
+  --whatsapp-pick: #25d366;
+  --telegram-pick: #2aabee;
+  --slack-pick: #e01e5a;
   --on-accent: #ffffff;
   --danger: #b3261e;
   --shadow: 0 16px 48px rgb(0 0 0 / 0.18);
@@ -209,14 +223,17 @@ body {
 /* Which web app an account loads, in the service's own colour. */
 [data-service] {
   --service: var(--whatsapp);
+  --service-pick: var(--whatsapp-pick);
 }
 
 [data-service="telegram"] {
   --service: var(--telegram);
+  --service-pick: var(--telegram-pick);
 }
 
 [data-service="slack"] {
   --service: var(--slack);
+  --service-pick: var(--slack-pick);
 }
 
 /* Brand marks are solid shapes, unlike the stroked glyphs of the other dock buttons. */
@@ -230,6 +247,20 @@ body {
 .dock-btn[data-service] {
   display: grid;
   place-items: center;
+}
+
+.dock-btn svg.brand {
+  transition: fill 0.15s ease;
+}
+
+.dock-btn[data-service]:hover,
+.dock-btn[data-service][aria-current="true"] {
+  background: var(--pick);
+  border-color: var(--pick);
+}
+
+:is(.dock-btn[data-service]:hover, .dock-btn[data-service][aria-current="true"]) svg.brand {
+  fill: var(--service-pick);
 }
 
 .dock li {
