@@ -10,16 +10,6 @@
   <string>public.app-category.social-networking</string>
 
   <!--
-    `localhost` is the origin Tauri's custom protocol uses on macOS/Windows when serving the
-    bundled frontend, so it must stay reachable for the launcher window.
-  -->
-  <key>NSAppTransportSecurity</key>
-  <dict>
-    <key>NSAllowsLocalNetworking</key>
-    <true/>
-  </dict>
-
-  <!--
     WhatsApp Web asks for these from the WKWebView. The usage strings are mandatory: without them
     macOS terminates the process as soon as the webview requests access, which is what makes voice
     notes, calls and the QR-code scanner crash instead of degrading gracefully.

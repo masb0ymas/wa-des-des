@@ -41,28 +41,15 @@ fn parse_dsn(raw: Option<&str>) -> Option<Dsn> {
 /// The guard owns the transport: dropping it shuts the transport down and any queued event is lost,
 /// which is why the caller binds it for the duration of `run`.
 ///
-/// `send_default_pii` is enabled, matching the documented configuration. Be aware of what it does
-/// and does not cover in this SDK:
-///
-/// - The Rust SDK has no HTTP-server integration, so the "capture user IPs and sensitive headers"
-///   behaviour the option is usually reached for does not apply here — nothing sends headers.
-/// - What it actually gates in `sentry` 0.49 is attaching the current user's id/email to **metrics**
-///   as attributes.
-/// - `username` is attached on its own by the SDK, independent of this flag, so it stays empty
-///   unless something sets it. This app never calls `set_user`, so no account name or phone number
-///   reaches Sentry.
-///
-/// Consequence for future code: with PII enabled, do not put account names, phone numbers or
-/// message content into `capture_message`, `capture_error` or breadcrumbs.
+/// `send_default_pii` stays off: the app's data is private conversations. Keep account names,
+/// phone numbers and message content out of `capture_message`, `capture_error` and breadcrumbs.
 pub fn init() -> ClientInitGuard {
     // Built with the setters rather than a struct literal: `ClientOptions` is `#[non_exhaustive]`
     // in this version, so `ClientOptions { .., ..Default::default() }` does not compile.
     let mut options = ClientOptions::new()
         // `maybe_release` is the setter built for `release_name!`, which yields an `Option`.
         .maybe_release(sentry::release_name!())
-        // See the doc comment: no headers are involved in a desktop app; this gates metric user
-        // attributes.
-        .send_default_pii(true);
+        .send_default_pii(false);
 
     // Assigned directly rather than through `.dsn(&str)`, which also panics on a malformed value.
     // This is equivalent to the `(dsn, options)` tuple form, minus that panic.
