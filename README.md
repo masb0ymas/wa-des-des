@@ -1,5 +1,14 @@
 # WaDesk
 
+<p align="center">
+  <a href="https://github.com/masb0ymas/wa-des-des/releases/latest"><img alt="Release" src="https://img.shields.io/github/v/release/masb0ymas/wa-des-des?display_name=tag&sort=semver"></a>
+  <a href="https://github.com/masb0ymas/wa-des-des/actions/workflows/release.yml"><img alt="Build" src="https://img.shields.io/github/actions/workflow/status/masb0ymas/wa-des-des/release.yml?label=release"></a>
+  <a href="https://github.com/masb0ymas/wa-des-des/releases"><img alt="Downloads" src="https://img.shields.io/github/downloads/masb0ymas/wa-des-des/total"></a>
+  <a href="LICENSE"><img alt="MIT License" src="https://img.shields.io/badge/license-MIT-green.svg"></a>
+  <img alt="Platforms" src="https://img.shields.io/badge/platform-macOS%20%7C%20Windows-lightgrey">
+  <img alt="Tauri" src="https://img.shields.io/badge/Tauri-2-24C8D8?logo=tauri&logoColor=white">
+</p>
+
 Desktop shell for WhatsApp Web, Telegram Web and Slack built with Tauri v2. One window: a dock on
 the left edge lists the accounts, and each account is its own native webview loading the service's
 web app next to it.
