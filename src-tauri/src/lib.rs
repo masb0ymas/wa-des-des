@@ -1044,8 +1044,17 @@ const SESSION_BOOTSTRAP: &str = r#"
     report('user-agent', { userAgent: navigator.userAgent });
   };
 
+  // Where each service puts its unread total in the page title. Telegram Web is absent on
+  // purpose: it reports the total itself, through the shell's `set_notifications_count` command,
+  // and a title-based zero from here would keep wiping that out.
+  const UNREAD_IN_TITLE = {
+    'web.whatsapp.com': /^\((\d+)\)/,
+    'app.slack.com': /(\d+) new items?\b/,
+  }[location.hostname];
+
   const readUnread = () => {
-    const match = /^\((\d+)\)/.exec(document.title || '');
+    if (!UNREAD_IN_TITLE) return;
+    const match = UNREAD_IN_TITLE.exec(document.title || '');
     report('unread', { count: match ? Number(match[1]) : 0 });
   };
 
@@ -1139,7 +1148,8 @@ fn build_tray(app: &AppHandle) -> tauri::Result<()> {
     Ok(())
 }
 
-/// Reports from the bootstrap script, and the only command a remote page may call.
+/// Reports from the bootstrap script. Besides [`set_notifications_count`], the only command a
+/// remote page may call.
 ///
 /// The account is the calling webview, which the runtime supplies; nothing in the payload can name
 /// another one. Everything else in the payload is untrusted text from a remote page.
@@ -1170,6 +1180,19 @@ fn session_report(app: AppHandle, webview: Webview, kind: String, payload: serde
         }
         _ => {}
     }
+}
+
+/// Telegram Web's own unread report.
+///
+/// Tauri sets `window.isTauri` in every webview, Telegram Web reads that as "running inside the
+/// Telegram desktop shell", and from then on hands its unread total to that shell's
+/// `set_notifications_count` command instead of putting it anywhere a page script could read.
+/// Answering the command is therefore what gives Telegram accounts a badge. `isMuted`, the other
+/// argument it sends, is not needed.
+#[tauri::command]
+fn set_notifications_count(app: AppHandle, webview: Webview, amount: Option<u64>) {
+    let count = amount.unwrap_or(0).min(u64::from(u32::MAX)) as u32;
+    report_unread(&app, webview.label(), count);
 }
 
 /// Records an account's unread counter, tells the dock, and keeps the app badge in sync.
@@ -1292,6 +1315,7 @@ pub fn run() {
             reload_session,
             clear_session_data,
             session_report,
+            set_notifications_count,
             test_notification,
             check_for_updates,
             install_update,

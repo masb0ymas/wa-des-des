@@ -97,10 +97,12 @@ The account webviews render third-party code from `web.whatsapp.com`, `web.teleg
 origins as untrusted:
 
 - Custom commands are **unreachable** from a remote page unless a capability explicitly lists the
-  origin under `remote.urls`. `capabilities/session.json` grants the `wa-*` webviews one command,
-  `session_report`, on the three app origins only. It takes the account from the calling webview,
-  so a page can report its own unread count and notifications and nothing else; every other
-  command stays out of reach even if the page calls `__TAURI_INTERNALS__.invoke`.
+  origin under `remote.urls`. `capabilities/session.json` grants the `wa-*` webviews two commands on
+  the three app origins only: `session_report`, used by the injected script, and
+  `set_notifications_count`, which Telegram Web calls by itself to report its unread total. Both
+  take the account from the calling webview, so a page can report its own unread count and
+  notifications and nothing else; every other command stays out of reach even if the page calls
+  `__TAURI_INTERNALS__.invoke`.
 - An account pane stays on its service: a top-level navigation to another site is opened in the
   system browser instead (Slack is exempt, because its sign-in passes through identity
   providers), and camera/microphone requests are denied whenever the pane is off its service.

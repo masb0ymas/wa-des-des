@@ -78,7 +78,8 @@ entry below keeps the original finding and ends with what was done.
   that takes the calling `Webview` from Tauri and derives the label from it; grant only that
   command to `wa-*` and drop `core:event:allow-emit`. Independently, make the `accounts://added`
   listener ignore its payload and call `get_settings`.
-- **Done:** both. `session_report` is the only command in the session capability, and
+- **Done:** both. The session capability holds `session_report` and, since Telegram badges were
+  added, `set_notifications_count`; each takes the account from the calling webview.
   `core:event:allow-emit` is gone, so pages can no longer emit events at all.
 
 ### M2 — Session capability covers more origins than it needs
