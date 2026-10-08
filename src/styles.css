@@ -179,6 +179,7 @@ body {
 }
 
 /* The theme button swaps one glyph per mode; `hidden` alone loses to `display: grid`. */
+.dock-btn.icon[hidden],
 .dock-btn.icon svg[hidden] {
   display: none;
 }

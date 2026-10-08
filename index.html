@@ -20,11 +20,14 @@
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14" /></svg>
       </button>
       <span class="spacer"></span>
+      <!-- ponytail: hidden while the grid misbehaves with more than 2 accounts; drop `hidden` once
+           that is fixed. -->
       <button
         id="open-grid"
         class="dock-btn icon"
         title="Multi-account"
         aria-label="Multi-account view"
+        hidden
       >
         <svg viewBox="0 0 24 24" aria-hidden="true">
           <rect x="3" y="3" width="7.5" height="7.5" rx="1.5" />
