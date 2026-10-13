@@ -3,6 +3,13 @@
 All notable changes to WaDesk will be documented in this file.
 
 
+## [0.3.0](https://github.com/masb0ymas/wa-des-des/compare/v0.2.2...v0.3.0) (2026-10-13)
+
+### Features
+
+* **accounts:** add ClickUp and Discord as account services ([3dbfee8](https://github.com/masb0ymas/wa-des-des/commit/3dbfee83a9d7ecfd193a254d1eaaeef130a3f24c))
+* **updater:** show an update-available toast in the bottom-right corner ([c96bfca](https://github.com/masb0ymas/wa-des-des/commit/c96bfcaa3c890594c74ca6709e4bfbe2b23c7008))
+
 ## [0.2.2](https://github.com/masb0ymas/wa-des-des/compare/v0.2.1...v0.2.2) (2026-10-08)
 
 ### Bug Fixes
