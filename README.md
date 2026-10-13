@@ -9,14 +9,14 @@
   <img alt="Tauri" src="https://img.shields.io/badge/Tauri-2-24C8D8?logo=tauri&logoColor=white">
 </p>
 
-Desktop shell for WhatsApp Web, Telegram Web and Slack built with Tauri v2. One window: a dock on
+Desktop shell for WhatsApp Web, Telegram Web, Slack, ClickUp and Discord built with Tauri v2. One window: a dock on
 the left edge lists the accounts, and each account is its own native webview loading the service's
 web app next to it.
 The settings live in the same window (gear button in the dock).
 
 ## Multiple accounts
 
-Press **+** in the dock to add an account and pick its service: WhatsApp, Telegram or Slack. It
+Press **+** in the dock to add an account and pick its service: WhatsApp, Telegram, Slack, ClickUp or Discord. It
 gets a new webview with an isolated data store
 (WebView2/WebKitGTK: `<app data>/accounts/<id>`; WKWebView: a data-store identifier, macOS 14+),
 so the accounts that are already linked are not reloaded or logged out. All accounts stay loaded in
@@ -101,19 +101,19 @@ src-tauri/capabilities/    IPC permissions, split per webview class
 
 ## Security model
 
-The account webviews render third-party code from `web.whatsapp.com`, `web.telegram.org` or
-`*.slack.com`. Tauri's ACL treats remote
+The account webviews render third-party code from `web.whatsapp.com`, `web.telegram.org`,
+`*.slack.com`, `app.clickup.com` or `discord.com`. Tauri's ACL treats remote
 origins as untrusted:
 
 - Custom commands are **unreachable** from a remote page unless a capability explicitly lists the
   origin under `remote.urls`. `capabilities/session.json` grants the `wa-*` webviews two commands on
-  the three app origins only: `session_report`, used by the injected script, and
+  the five app origins only: `session_report`, used by the injected script, and
   `set_notifications_count`, which Telegram Web calls by itself to report its unread total. Both
   take the account from the calling webview, so a page can report its own unread count and
   notifications and nothing else; every other command stays out of reach even if the page calls
   `__TAURI_INTERNALS__.invoke`.
 - An account pane stays on its service: a top-level navigation to another site is opened in the
-  system browser instead (Slack is exempt, because its sign-in passes through identity
+  system browser instead (Slack and ClickUp are exempt, because their sign-in passes through identity
   providers), and camera/microphone requests are denied whenever the pane is off its service.
 - `capabilities/launcher.json` is `local: true` and bound to the bundled `main` webview (by
   webview label, since every webview shares the one window), which is the only place that can

@@ -29,6 +29,9 @@
   --whatsapp: #25d366;
   --telegram: #2aabee;
   --slack: #e01e5a;
+  /* Same in both themes and on both surfaces, so the light blocks below do not repeat them. */
+  --clickup: #7b68ee;
+  --discord: #5865f2;
   /* Hovered or shown account in the dock: an inverted disc, so the brand mark sits on the
      surface it was drawn for. The -pick colours are the brand colours for that surface. */
   --pick: #ffffff;
@@ -235,6 +238,16 @@ body {
 [data-service="slack"] {
   --service: var(--slack);
   --service-pick: var(--slack-pick);
+}
+
+[data-service="clickup"] {
+  --service: var(--clickup);
+  --service-pick: var(--clickup);
+}
+
+[data-service="discord"] {
+  --service: var(--discord);
+  --service-pick: var(--discord);
 }
 
 /* Brand marks are solid shapes, unlike the stroked glyphs of the other dock buttons. */

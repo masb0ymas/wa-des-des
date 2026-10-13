@@ -25,11 +25,19 @@ pub enum Service {
     Whatsapp,
     Telegram,
     Slack,
+    Clickup,
+    Discord,
 }
 
 impl Service {
     #[cfg(test)]
-    pub const ALL: [Service; 3] = [Service::Whatsapp, Service::Telegram, Service::Slack];
+    pub const ALL: [Service; 5] = [
+        Service::Whatsapp,
+        Service::Telegram,
+        Service::Slack,
+        Service::Clickup,
+        Service::Discord,
+    ];
 
     /// Page the account's webview starts on, and returns to after its data is cleared.
     pub fn url(self) -> &'static str {
@@ -37,6 +45,8 @@ impl Service {
             Service::Whatsapp => "https://web.whatsapp.com/",
             Service::Telegram => "https://web.telegram.org/a/",
             Service::Slack => "https://app.slack.com/client",
+            Service::Clickup => "https://app.clickup.com/",
+            Service::Discord => "https://discord.com/app",
         }
     }
 
@@ -46,6 +56,8 @@ impl Service {
             Service::Whatsapp => "whatsapp.com",
             Service::Telegram => "telegram.org",
             Service::Slack => "slack.com",
+            Service::Clickup => "clickup.com",
+            Service::Discord => "discord.com",
         }
     }
 
@@ -65,6 +77,8 @@ impl Service {
             Service::Whatsapp => "WhatsApp",
             Service::Telegram => "Telegram",
             Service::Slack => "Slack",
+            Service::Clickup => "ClickUp",
+            Service::Discord => "Discord",
         }
     }
 }

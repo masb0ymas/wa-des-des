@@ -935,9 +935,13 @@ fn build_account_webview(
                 let url = payload.url();
                 let owned = service.owns(url);
                 on_service.store(owned, Ordering::Relaxed);
-                // Slack signs in through third-party identity providers in this same frame, so its
-                // pane may leave the site; it just gets no device access while it is away.
-                if owned || service == Service::Slack || !matches!(url.scheme(), "http" | "https") {
+                // Slack and ClickUp sign in through third-party identity providers in this same
+                // frame, so their panes may leave the site; they just get no device access while
+                // they are away.
+                if owned
+                    || matches!(service, Service::Slack | Service::Clickup)
+                    || !matches!(url.scheme(), "http" | "https")
+                {
                     return;
                 }
                 // Another site inside an account pane has no address bar to give it away: show it
@@ -1119,10 +1123,12 @@ const SESSION_BOOTSTRAP: &str = r#"
 
   // Where each service puts its unread total in the page title. Telegram Web is absent on
   // purpose: it reports the total itself, through the shell's `set_notifications_count` command,
-  // and a title-based zero from here would keep wiping that out.
+  // and a title-based zero from here would keep wiping that out. Discord counts mentions and
+  // direct messages only; ClickUp puts no count in its title, so it gets no badge.
   const UNREAD_IN_TITLE = {
     'web.whatsapp.com': /^\((\d+)\)/,
     'app.slack.com': /(\d+) new items?\b/,
+    'discord.com': /^\((\d+)\)/,
   }[location.hostname];
 
   const readUnread = () => {
