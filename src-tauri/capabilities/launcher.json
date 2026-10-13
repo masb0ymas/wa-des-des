@@ -1,9 +1,9 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "identifier": "launcher",
-  "description": "Permissions for the bundled UI webviews (dock + settings, and the transparent dialog overlay that loads the same bundle). It owns settings, accounts and app lifecycle; it never executes WhatsApp Web code. Scoped by webview, not window: the account webviews share the same window.",
+  "description": "Permissions for the bundled UI webviews (dock + settings, and the transparent dialog overlay and update toast that load the same bundle). It owns settings, accounts and app lifecycle; it never executes WhatsApp Web code. Scoped by webview, not window: the account webviews share the same window.",
   "local": true,
-  "webviews": ["main", "overlay"],
+  "webviews": ["main", "overlay", "toast"],
   "permissions": [
     "core:default",
     "core:window:allow-set-theme",
@@ -24,6 +24,7 @@
     "allow-test-notification",
     "allow-check-for-updates",
     "allow-install-update",
+    "allow-close-update-toast",
     "updater:default"
   ]
 }

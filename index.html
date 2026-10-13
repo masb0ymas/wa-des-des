@@ -213,6 +213,14 @@
       </form>
     </dialog>
 
+    <!-- Only ever opened in the small transparent `toast` webview in the window's bottom-right
+         corner, which loads this page as index.html?version=…#update-toast. -->
+    <dialog id="update-toast" aria-label="Update available">
+      <p id="update-toast-message" role="status"></p>
+      <button id="update-toast-install" class="primary">Update</button>
+      <button id="update-toast-dismiss" class="ghost" aria-label="Dismiss">✕</button>
+    </dialog>
+
     <!-- window.confirm() is not implemented by WKWebView under Tauri (it returns false without
          showing anything), so destructive actions ask through this dialog instead. -->
     <dialog id="confirm-dialog">

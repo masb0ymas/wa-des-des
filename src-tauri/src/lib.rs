@@ -8,6 +8,8 @@
 //!
 //! HTML cannot be drawn over a native webview, so the "Add account" dialog lives in a third kind of
 //! webview: a transparent `overlay` that covers the whole window while the dialog is open.
+//! The "update available" toast is a fourth: a small transparent `toast` pinned to the bottom-right
+//! corner.
 //!
 //! Account webviews are built through [`tauri::webview::WebviewBuilder`] because the User-Agent and
 //! the data store must be installed at webview creation time. Changing the UA therefore recreates
@@ -46,6 +48,16 @@ use settings::{Account, Service, Settings, ACCOUNT_LABEL_PREFIX, DEFAULT_ACCOUNT
 const MAIN_LABEL: &str = "main";
 /// Label of the transparent webview that draws the "Add account" dialog above everything else.
 const OVERLAY_LABEL: &str = "overlay";
+/// Label of the small transparent webview that draws the "update available" toast in the window's
+/// bottom-right corner.
+const TOAST_LABEL: &str = "toast";
+/// Size of the toast webview in logical pixels. The page insets the toast itself, which leaves room
+/// for its shadow; see `#update-toast` in `src/styles.css`.
+const TOAST_WIDTH: f64 = 364.0;
+const TOAST_HEIGHT: f64 = 92.0;
+/// Time between two background update checks. The app lives in the tray for days, so a check at
+/// startup alone would miss most releases.
+const UPDATE_CHECK_INTERVAL: Duration = Duration::from_secs(6 * 60 * 60);
 /// Width of the account dock in logical pixels. Must match `--dock` in `src/styles.css`.
 const DOCK_WIDTH: f64 = 64.0;
 /// Height of the toolbar above the grid in the multi-account view. Must match `--gridbar` in
@@ -190,6 +202,8 @@ struct SessionState {
     /// Last zoom applied per webview label. `setPageZoom` reflows the page even for a same-value
     /// call, so `apply_view` must only reach the engine when the value actually changes.
     zooms: HashMap<String, f64>,
+    /// Version the update toast announces; `None` before one is found and after it is dismissed.
+    update_toast: Option<String>,
 }
 
 fn err(error: impl ToString) -> String {
@@ -353,6 +367,47 @@ fn apply_view(app: &AppHandle) {
     }
 }
 
+/// Where the update toast sits: the window's bottom-right corner.
+fn toast_bounds(window: &Window) -> tauri::Result<tauri::Rect> {
+    let size = window.inner_size()?.to_logical::<f64>(window.scale_factor()?);
+    Ok(tauri::Rect {
+        position: LogicalPosition::new(
+            (size.width - TOAST_WIDTH).max(0.0),
+            (size.height - TOAST_HEIGHT).max(0.0),
+        )
+        .into(),
+        size: LogicalSize::new(TOAST_WIDTH, TOAST_HEIGHT).into(),
+    })
+}
+
+/// (Re)builds the toast for the release recorded in the session state; a no-op without one.
+/// Rebuilding is how the toast gets back on top: the newest child webview is the topmost one, so
+/// every account webview created later would otherwise cover it.
+fn show_update_toast(app: &AppHandle) -> tauri::Result<()> {
+    let version = app
+        .state::<Mutex<SessionState>>()
+        .lock()
+        .ok()
+        .and_then(|state| state.update_toast.clone());
+    let Some(version) = version else {
+        return Ok(());
+    };
+    if let Some(stale) = app.get_webview(TOAST_LABEL) {
+        let _ = stale.close();
+    }
+    let window = main_window(app)?;
+    let bounds = toast_bounds(&window)?;
+    // `+` (semver build metadata) would reach the page's query parser as a space.
+    let url = format!("index.html?version={}#update-toast", version.replace('+', "%2B"));
+    // No `set_focus`: the toast must not take the caret out of the chat the user is typing in.
+    window.add_child(
+        WebviewBuilder::new(TOAST_LABEL, WebviewUrl::App(url.into())).transparent(true),
+        bounds.position,
+        bounds.size,
+    )?;
+    Ok(())
+}
+
 /// Keeps the webviews glued to the window. Done by hand rather than with `auto_resize`, which
 /// scales proportionally and would let the fixed-width dock drift.
 fn layout(window: &Window) {
@@ -366,6 +421,9 @@ fn layout(window: &Window) {
             position: LogicalPosition::new(0.0, 0.0).into(),
             size: size.to_logical::<f64>(scale).into(),
         });
+    }
+    if let (Some(toast), Ok(bounds)) = (window.get_webview(TOAST_LABEL), toast_bounds(window)) {
+        let _ = toast.set_bounds(bounds);
     }
     apply_view(window.app_handle());
 }
@@ -500,6 +558,19 @@ async fn open_add_dialog(app: AppHandle) -> Result<(), String> {
 #[tauri::command]
 fn close_add_dialog(app: AppHandle) {
     if let Some(webview) = app.get_webview(OVERLAY_LABEL) {
+        let _ = webview.close();
+    }
+    // Hands keyboard focus back to whatever is on screen.
+    apply_view(&app);
+}
+
+/// Dismisses the update toast for the rest of this run.
+#[tauri::command]
+fn close_update_toast(app: AppHandle) {
+    if let Ok(mut state) = app.state::<Mutex<SessionState>>().lock() {
+        state.update_toast = None;
+    }
+    if let Some(webview) = app.get_webview(TOAST_LABEL) {
         let _ = webview.close();
     }
     // Hands keyboard focus back to whatever is on screen.
@@ -746,8 +817,8 @@ async fn install_update(app: AppHandle) -> Result<(), String> {
     update
         .download_and_install(
             move |received, total| {
-                let _ = handle.emit_to(
-                    MAIN_LABEL,
+                // Broadcast: both the settings panel and the toast show it.
+                let _ = handle.emit(
                     "update://progress",
                     json!({ "received": received, "total": total }),
                 );
@@ -928,6 +999,8 @@ fn build_account_webview(
     let _ = webview.set_zoom(settings.zoom);
     // Hidden until `show_account` picks it, so the settings panel or another account stays on top.
     let _ = webview.hide();
+    // This webview is now the topmost child; put the toast back above it.
+    let _ = show_update_toast(app);
     Ok(webview)
 }
 
@@ -1331,6 +1404,7 @@ pub fn run() {
             test_notification,
             check_for_updates,
             install_update,
+            close_update_toast,
         ])
         .setup(|app| {
             let handle = app.handle().clone();
@@ -1346,6 +1420,22 @@ pub fn run() {
             }
 
             show_account(&handle, settings.accounts.first().map(|account| account.id.as_str()));
+
+            // Looks for a newer release until one turns up, then announces it once: a dismissed
+            // toast stays away until the next launch.
+            std::thread::spawn(move || loop {
+                let found = handle.updater().ok().and_then(|updater| {
+                    tauri::async_runtime::block_on(updater.check()).ok().flatten()
+                });
+                if let Some(update) = found {
+                    if let Ok(mut state) = handle.state::<Mutex<SessionState>>().lock() {
+                        state.update_toast = Some(update.version);
+                    }
+                    let _ = show_update_toast(&handle);
+                    break;
+                }
+                std::thread::sleep(UPDATE_CHECK_INTERVAL);
+            });
 
             Ok(())
         })

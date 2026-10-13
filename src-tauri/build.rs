@@ -21,6 +21,7 @@ fn main() {
                 "test_notification",
                 "check_for_updates",
                 "install_update",
+                "close_update_toast",
             ]),
         ),
     )

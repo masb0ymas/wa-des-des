@@ -404,14 +404,8 @@ async function subscribeSessionEvents(): Promise<void> {
     });
   });
 
-  // Emitted while the downloaded update streams in; `total` stays null when unknown.
-  await listen<{ received: number; total: number | null }>("update://progress", (event) => {
-    const { received, total } = event.payload;
-    const status = el<HTMLElement>("update-status");
-    status.textContent =
-      total !== null
-        ? `Downloading update… ${Math.round((received / total) * 100)}%`
-        : `Downloading update… ${(received / 1048576).toFixed(1)} MB`;
+  await listenUpdateProgress((text) => {
+    el<HTMLElement>("update-status").textContent = text;
   });
 
   // Pushed once per run when the system reports notifications are disabled for the app.
@@ -458,6 +452,18 @@ function bindCheckbox(id: string, key: "nativeNotifications" | "badgeUnreadCount
 interface UpdateCheck {
   currentVersion: string;
   update: { version: string; notes: string } | null;
+}
+
+/** Emitted while the downloaded update streams in; `total` stays null when unknown. */
+function listenUpdateProgress(show: (text: string) => void): Promise<unknown> {
+  return listen<{ received: number; total: number | null }>("update://progress", (event) => {
+    const { received, total } = event.payload;
+    show(
+      total !== null
+        ? `Downloading update… ${Math.round((received / total) * 100)}%`
+        : `Downloading update… ${(received / 1048576).toFixed(1)} MB`,
+    );
+  });
 }
 
 /** Checks GitHub Releases and, with the user's confirmation, installs what it finds. */
@@ -700,6 +706,40 @@ async function runAddDialog(): Promise<void> {
   }
 }
 
+/** The toast webview: nothing but the "update available" toast, built by the backend once its
+    background check finds a newer release and torn down when dismissed. */
+async function runUpdateToast(): Promise<void> {
+  await applyStoredTheme();
+
+  const message = el<HTMLParagraphElement>("update-toast-message");
+  const install = el<HTMLButtonElement>("update-toast-install");
+  const version = new URLSearchParams(location.search).get("version");
+  message.textContent = version ? `WaDesk v${version} is available.` : "A WaDesk update is available.";
+
+  // Also fires for an install started from the settings panel, hence the button.
+  await listenUpdateProgress((text) => {
+    install.disabled = true;
+    message.textContent = text;
+  });
+
+  install.addEventListener("click", () => {
+    install.disabled = true;
+    message.textContent = "Downloading update…";
+    // On success the app restarts, so an unresolved command is expected here.
+    void call<null>("install_update").then((done) => {
+      if (done !== undefined) return;
+      message.textContent = "Update failed. Try again from Settings.";
+      install.disabled = false;
+    });
+  });
+  el<HTMLButtonElement>("update-toast-dismiss").addEventListener("click", () => {
+    void call("close_update_toast");
+  });
+
+  // Non-modal: the rest of the window stays usable, and Escape does not dismiss it.
+  el<HTMLDialogElement>("update-toast").show();
+}
+
 /** Reads the stored choice and paints this document before anything is shown. */
 async function applyStoredTheme(): Promise<void> {
   const stored = await call<Settings>("get_settings");
@@ -709,4 +749,5 @@ async function applyStoredTheme(): Promise<void> {
 }
 
 if (location.hash === "#add-account-dialog") void runAddDialog();
+else if (location.hash === "#update-toast") void runUpdateToast();
 else void main();

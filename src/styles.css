@@ -521,6 +521,30 @@ dialog {
   box-shadow: var(--shadow);
 }
 
+/* The update toast webview: a non-modal dialog filling its small corner pane, inset so the shadow
+   is not clipped by the pane's edge. The pane's size is `TOAST_WIDTH`/`TOAST_HEIGHT` in
+   src-tauri/src/lib.rs. */
+#update-toast {
+  position: fixed;
+  inset: 12px 16px 16px 12px;
+  width: auto;
+  height: auto;
+  margin: 0;
+  padding: 10px 10px 10px 14px;
+  box-shadow: 0 4px 12px rgb(0 0 0 / 0.3);
+}
+
+#update-toast[open] {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+#update-toast p {
+  flex: 1;
+  margin: 0;
+}
+
 dialog::backdrop {
   background: var(--scrim);
 }
