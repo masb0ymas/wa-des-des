@@ -3,6 +3,12 @@
 All notable changes to WaDesk will be documented in this file.
 
 
+## [0.3.2](https://github.com/masb0ymas/wa-des-des/compare/v0.3.1...v0.3.2) (2026-10-20)
+
+### Bug Fixes
+
+* improve icon size ([b3b6483](https://github.com/masb0ymas/wa-des-des/commit/b3b6483545fe4a5bf015a66cc25407f859c30536))
+
 ## [0.3.1](https://github.com/masb0ymas/wa-des-des/compare/v0.3.0...v0.3.1) (2026-10-20)
 
 ### Bug Fixes
