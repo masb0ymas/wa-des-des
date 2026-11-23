@@ -3,6 +3,8 @@
 All notable changes to WaDesk will be documented in this file.
 
 
+## [0.3.3](https://github.com/masb0ymas/wa-des-des/compare/v0.3.2...v0.3.3) (2026-11-23)
+
 ## [0.3.2](https://github.com/masb0ymas/wa-des-des/compare/v0.3.1...v0.3.2) (2026-10-20)
 
 ### Bug Fixes
